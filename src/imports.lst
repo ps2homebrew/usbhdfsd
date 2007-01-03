@@ -21,6 +21,7 @@ I_strcpy
 I_strncpy
 I_strncmp
 I_strtol
+I_strrchr
 I_sprintf
 sysclib_IMPORTS_end
 

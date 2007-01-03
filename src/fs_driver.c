@@ -1,3 +1,6 @@
+//---------------------------------------------------------------------------
+//File name:    fs_driver.c
+//---------------------------------------------------------------------------
 /*
  * fat_driver.c - USB Mass storage driver for PS2
  *
@@ -17,6 +20,7 @@
 
 #include <thbase.h>
 #include <errno.h>
+#include <sysmem.h>
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
 
@@ -25,9 +29,12 @@
 #include "fat_write.h"
 #include "usbhd_common.h"
 
-//#define DEBUG
+//#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
+
+#define IOCTL_CKFREE 0xBABEC0DE  //dlanor: Ioctl request code => Check free space
+#define IOCTL_RENAME 0xFEEDC0DE  //dlanor: Ioctl request code => Rename
 
 #define FLUSH_SECTORS		scache_flushSectors
 
@@ -87,11 +94,16 @@ int	removalTime;
 int     removalResult;
 
 typedef struct {
+	int           file_flag;
+  //This flag is always 1 for a file, and always 0 for a folder (different typedef)
+  //Routines that handle both must test it, and then typecast the privdata pointer
+  //to the type that is appropriate for the given case. (see also fs_rec typedef)
    int status;
    fat_dir fatdir;
 } D_PRIVATE;
 
 
+//---------------------------------------------------------------------------
 int fs_findFreeFileSlot(int fd) {
 	int i;
 	int result = -1;
@@ -104,6 +116,7 @@ int fs_findFreeFileSlot(int fd) {
 	return result;
 }
 
+//---------------------------------------------------------------------------
 int fs_findFileSlot(iop_file_t* file) {
 	int i;
 	int result = -1;
@@ -119,6 +132,7 @@ int fs_findFileSlot(iop_file_t* file) {
 	return result;
 }
 
+//---------------------------------------------------------------------------
 int fs_findFileSlotByName(const char* name) {
 	int i;
 	int result = -1;
@@ -132,8 +146,10 @@ int fs_findFileSlotByName(const char* name) {
 	return result;
 }
 
+//---------------------------------------------------------------------------
 static int _lock_sema_id = 0;
 
+//---------------------------------------------------------------------------
 int _fs_init_lock(void)
 {
 	iop_sema_t sp;
@@ -147,18 +163,21 @@ int _fs_init_lock(void)
 	return(0);
 }
 
+//---------------------------------------------------------------------------
 int _fs_lock(void)
 {
     if(WaitSema(_lock_sema_id) != _lock_sema_id) { return(-1); }
     return(0);
 }
 
+//---------------------------------------------------------------------------
 int _fs_unlock(void)
 {
     SignalSema(_lock_sema_id);
     return(0);
 }
 
+//---------------------------------------------------------------------------
 void fs_reset(void)
 {
 	int i;
@@ -167,8 +186,10 @@ void fs_reset(void)
 	_fs_init_lock();
 }
 
+//---------------------------------------------------------------------------
 int fs_inited = 0;
 
+//---------------------------------------------------------------------------
 int fs_init(iop_device_t *driver)
 {
     if(fs_inited) { return(1); }
@@ -179,6 +200,7 @@ int fs_init(iop_device_t *driver)
 	return 1;
 }
 
+//---------------------------------------------------------------------------
 int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 	int index, index2;
 	int mode2;
@@ -186,17 +208,18 @@ int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 	unsigned int cluster;
 	char escapeNotExist;
 
-    _fs_lock();
+	_fs_lock();
 
 	XPRINTF("fs_open called: %s mode=%X \n", name, mode) ;
 
-    //check if media mounted
-    ret = fat_mountCheck();
-    if (ret < 0) { _fs_unlock(); return ret; }
+	//check if media mounted
+	ret = fat_mountCheck();
+	if (ret < 0) { _fs_unlock(); return ret; }
 
 	//check if the slot is free
 	index = fs_findFreeFileSlot(-1);
 	if (index  < 0) { _fs_unlock(); return -EMFILE; }
+	fsRec[index].file_flag = 1;
 
 	//check if the file is already open
 	index2 = fs_findFileSlotByName(name);
@@ -204,14 +227,14 @@ int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 	//file already open
 	if (index2 >= 0) {
 		mode2 = fsRec[index2].mode;
-		if (	(mode  & O_RDWR || mode  & O_WRONLY) || //current file is opened for write
-			(mode2 & O_RDWR || mode2 & O_WRONLY) ) {//other file is opened for write
+		if (	(mode & O_WRONLY) || //current file is opened for write
+			(mode2 & O_WRONLY) ) {//other file is opened for write
 			_fs_unlock();
 			return 	-EACCES;
 		}
 	}
 
-	if (mode & O_RDWR || mode & O_WRONLY) {
+	if((mode & O_WRONLY))  { //dlanor: corrected bad test condition
 		cluster = 0; //start from root
 
 		escapeNotExist = 1;
@@ -236,6 +259,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 
 	//find the file
 	cluster = 0; //allways start from root
+	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
 	ret = fat_getFileStartCluster(&partBpb, name, &cluster, &fsDir[index]);
 	if (ret < 0) {
 	    _fs_unlock(); 
@@ -249,7 +273,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 	fsRec[index].filePos = 0;
 	fsRec[index].sizeChange  = 0;
 
-	if ((mode & O_APPEND) && (mode & O_RDWR || mode & O_WRONLY)) {
+	if ((mode & O_APPEND) && (mode & O_WRONLY)) {
 		XPRINTF("FAT I: O_APPEND detected!\n");
 		fsRec[index].filePos = fsDir[index].size;
 	}
@@ -261,6 +285,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
 	return fsCounter;
 }
 
+//---------------------------------------------------------------------------
 int fs_close(iop_file_t* fd) {
 	int index;
     int ret;
@@ -278,7 +303,7 @@ int fs_close(iop_file_t* fd) {
 	}
 	fsRec[index].fd = -1;
 
-	if (fsRec[index].mode & O_RDWR || fsRec[index].mode & O_WRONLY) {
+	if ((fsRec[index].mode & O_WRONLY)) {
 		//update direntry size and time
 		if (fsRec[index].sizeChange) {
 			fat_updateSfn(fsDir[index].size, fsRec[index].sfnSector, fsRec[index].sfnOffset);
@@ -291,6 +316,7 @@ int fs_close(iop_file_t* fd) {
 	return 0;
 }
 
+//---------------------------------------------------------------------------
 int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 	int index;
     int ret;
@@ -331,6 +357,7 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 	return fsRec[index].filePos;
 }
 
+//---------------------------------------------------------------------------
 int fs_write(iop_file_t* fd, void * buffer, int size )
 {
 	int index;
@@ -367,6 +394,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 	return result;
 }
 
+//---------------------------------------------------------------------------
 int fs_read(iop_file_t* fd, void * buffer, int size ) {
 	int index;
 	int result;
@@ -403,6 +431,7 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 }
 
 
+//---------------------------------------------------------------------------
 int getNameSignature(const char *name) {
 	int ret;
 	int i;
@@ -412,6 +441,7 @@ int getNameSignature(const char *name) {
 	return ret;
 }
 
+//---------------------------------------------------------------------------
 int getMillis()
 {
 	iop_sys_clock_t clock;
@@ -422,6 +452,7 @@ int getMillis()
 	return   (sec*1000) + (usec/1000);
 }
 
+//---------------------------------------------------------------------------
 int fs_remove (iop_file_t *fd, const char *name) {
 	int index;
 	int result;
@@ -461,6 +492,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
 	return result;
 }
 
+//---------------------------------------------------------------------------
 int fs_mkdir  (iop_file_t *fd, const char *name) {
 	int ret;
 	int sfnOffset;
@@ -495,6 +527,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 	return ret;
 }
 
+//---------------------------------------------------------------------------
 // NOTE! you MUST call fioRmdir with device number in the name
 // or else this fs_rmdir function is never called.
 // example: fioRmdir("mass:/dir1");  //    <-- doesn't work (bug?)
@@ -514,72 +547,76 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 	return ret;
 }
 
+//---------------------------------------------------------------------------
 int fs_dopen  (iop_file_t *fd, const char *name)
 {
-	int index;
+	//int index;
 	fat_dir fatdir;
-    int ret, is_root = 0;
+	int ret, is_root = 0;
 
-    _fs_lock();
+	_fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck();
-    if (ret < 0) { _fs_unlock(); return ret; }
+	//check if media mounted
+	ret = fat_mountCheck();
+	if (ret < 0) { _fs_unlock(); return ret; }
 
 	fsCounter++;
 
-    if(((name[0] == '/') && (name[1] == '\0')) || ((name[0] == '/') && (name[1] == '.') && (name[2] == '\0')))
-    {
-        name = "/";
-        is_root = 1;
-    }
+	if( ((name[0] == '/') && (name[1] == '\0'))
+		||((name[0] == '/') && (name[1] == '.') && (name[2] == '\0')))
+	{
+		name = "/";
+		is_root = 1;
+	}
 
-    ret = fat_getFirstDirentry((char*)name, &fatdir);
+	ret = fat_getFirstDirentry((char*)name, &fatdir);
 
 	fd->privdata = (void*)malloc(sizeof(D_PRIVATE));
-	memset(fd->privdata, 0, sizeof(D_PRIVATE));
+	memset(fd->privdata, 0, sizeof(D_PRIVATE)); //NB: also implies "file_flag = 0;"
 
 	if (ret < 1)
 	{
-	    // root directory may have no entries, nothing else may.
-	    if(!is_root) { free(fd->privdata); _fs_unlock(); return(-1); }
+		// root directory may have no entries, nothing else may.
+		if(!is_root) { free(fd->privdata); _fs_unlock(); return(-1); }
 
-        // cause "dread" to return "no entries" immediately since dir is empty.
-        ((D_PRIVATE *) fd->privdata)->status = 1;
-    }
+		// cause "dread" to return "no entries" immediately since dir is empty.
+		((D_PRIVATE *) fd->privdata)->status = 1;
+	}
 
 	memcpy(&(((D_PRIVATE*)fd->privdata)->fatdir), &fatdir, sizeof(fatdir));
 
-    _fs_unlock();
- 	return fsCounter;
+	_fs_unlock();
+	return fsCounter;
 }
 
+//---------------------------------------------------------------------------
 int fs_dclose (iop_file_t *fd)
 {
-    _fs_lock();
- 	free(fd->privdata);
-    _fs_unlock();
- 	return 0;
+	_fs_lock();
+	free(fd->privdata);
+	_fs_unlock();
+	return 0;
 }
 
+//---------------------------------------------------------------------------
 int fs_dread  (iop_file_t *fd, void* data)
 {
 	int notgood;
-    int ret;
+	int ret;
 
-    _fs_lock();
+	_fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck();
-    if (ret < 0) { _fs_unlock(); return ret; }
+	//check if media mounted
+	ret = fat_mountCheck();
+	if (ret < 0) { _fs_unlock(); return ret; }
 
 	fio_dirent_t *buffer = (fio_dirent_t *)data;
 	do {
 		if (((D_PRIVATE*)fd->privdata)->status)
 		{
-            _fs_unlock();
- 			return 0;
- 		}
+			_fs_unlock();
+			return 0;
+		}
 
 		notgood = 0;
 
@@ -589,7 +626,7 @@ int fs_dread  (iop_file_t *fd, void* data)
 		}
 		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & 0x10) {
 			buffer->stat.mode |= FIO_SO_IFDIR;
-	        } else {
+		} else {
 			buffer->stat.mode |= FIO_SO_IFREG;
 		}
 
@@ -597,14 +634,43 @@ int fs_dread  (iop_file_t *fd, void* data)
 
 		strcpy(buffer->name, (const char*)(((D_PRIVATE*)fd->privdata)->fatdir).name);
 
+		//set created Date: Day, Month, Year
+		buffer->stat.ctime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[0];
+		buffer->stat.ctime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[1];
+		buffer->stat.ctime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[2];
+		buffer->stat.ctime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[3];
+
+		//set created Time: Hours, Minutes, Seconds
+		buffer->stat.ctime[3] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[0];
+		buffer->stat.ctime[2] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[1];
+		buffer->stat.ctime[1] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[2];
+
+ 		//set accessed Date: Day, Month, Year
+		buffer->stat.atime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[0];
+		buffer->stat.atime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[1];
+		buffer->stat.atime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[2];
+		buffer->stat.atime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[3];
+
+		//set modified Date: Day, Month, Year
+		buffer->stat.mtime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[0];
+		buffer->stat.mtime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[1];
+		buffer->stat.mtime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[2];
+		buffer->stat.mtime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[3];
+ 
+		//set modified Time: Hours, Minutes, Seconds
+		buffer->stat.mtime[3] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[0];
+		buffer->stat.mtime[2] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[1];
+		buffer->stat.mtime[1] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[2];
+
 		if (fat_getNextDirentry(&(((D_PRIVATE*)fd->privdata)->fatdir))<1)
 			((D_PRIVATE*)fd->privdata)->status = 1;	/* no more entries */
 	} while (notgood);
 
-    _fs_unlock();
- 	return 1;
+	_fs_unlock();
+	return 1;
 }
 
+//---------------------------------------------------------------------------
 int fs_getstat(iop_file_t *fd, const char *name, void* data)
 {
 	int ret;
@@ -612,15 +678,16 @@ int fs_getstat(iop_file_t *fd, const char *name, void* data)
 	fio_stat_t *stat = (fio_stat_t *)data;
 	fat_dir fatdir;
 
-    _fs_lock();
+	_fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck();
-    if (ret < 0) { _fs_unlock(); return ret; }
+	//check if media mounted
+	ret = fat_mountCheck();
+	if (ret < 0) { _fs_unlock(); return ret; }
 
+	XPRINTF("Calling fat_getFileStartCluster from fs_getstat\n");
 	ret = fat_getFileStartCluster(&partBpb, name, &cluster, &fatdir);
 	if (ret < 0) {
-        _fs_unlock();
+		_fs_unlock();
 		return -1;
 	}
 
@@ -631,31 +698,58 @@ int fs_getstat(iop_file_t *fd, const char *name, void* data)
 	else
 		stat->mode |= FIO_SO_IFREG;
 
-    _fs_unlock();
+	_fs_unlock();
 	return 0;
 }
 
+//---------------------------------------------------------------------------
 int fs_chstat (iop_file_t *fd, const char *name, void *buffer, unsigned int a)
 {
 	return fs_dummy();
 }
 
+//---------------------------------------------------------------------------
 int fs_deinit (iop_device_t *fd)
 {
 	return fs_dummy();
 }
 
+//---------------------------------------------------------------------------
 int fs_format (iop_file_t *fd, ...)
 {
 	return fs_dummy();
 }
 
-int fs_ioctl  (iop_file_t *fd, unsigned long a, void *b)
+//---------------------------------------------------------------------------
+int fs_ioctl  (iop_file_t *fd, unsigned long request, void *data)
 {
-	return fs_dummy();
+	int ret;
+
+	_fs_lock();
+	//check if media mounted
+	ret = fat_mountCheck();
+	if (ret < 0) goto return_ret;
+
+	switch (request) {
+		case IOCTL_CKFREE:  //Request to calculate free space (ignore file/folder selected)
+			ret = fs_dummy();
+			break;
+		case IOCTL_RENAME:  //Request to rename opened file/folder
+			ret = fs_dummy();
+			break;
+		default:
+			ret = fs_dummy();
+	}
+return_ret:
+	_fs_unlock();
+	return ret;
 }
 
+//---------------------------------------------------------------------------
 int fs_dummy(void)
 {
 	return -5;
 }
+//---------------------------------------------------------------------------
+//End of file:  fs_driver.c
+//---------------------------------------------------------------------------

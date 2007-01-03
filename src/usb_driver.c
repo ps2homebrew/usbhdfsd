@@ -6,10 +6,13 @@
 #include <stdarg.h>
 #include <tamtypes.h>
 #include <thsemap.h>
+#include <thbase.h>
 #include <stdio.h>
 #include <usbd.h>
 #include <usbd_macro.h>
 #include "mass_stor.h"
+
+//#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
 #include "usbhd_common.h"
@@ -295,7 +298,7 @@ void set_device_feature(mass_dev* dev, int feature) {
 	s.attr = 0;
 	semh = CreateSema(&s);
 
-	XPRINTF("setting device feature controlEp=%i, feature=%i altSetting=%i\n", dev->controlEp, feature);
+	XPRINTF("setting device feature controlEp=%i, feature=%i\n", dev->controlEp, feature);
 
 	ret = UsbSetDeviceFeature(dev->controlEp, feature, usb_callback, (void*)semh);
 

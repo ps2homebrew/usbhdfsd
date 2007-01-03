@@ -9,6 +9,7 @@
 #include <thbase.h>
 #include <thsemap.h>
 #include <sifrpc.h>
+#include <loadcore.h>
 #include <ioman.h>
 #include <sysclib.h>
 #include <stdio.h>

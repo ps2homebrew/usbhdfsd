@@ -50,7 +50,11 @@ typedef struct _mass_dev
 } mass_dev;
 
 typedef struct _fs_rec {
-	int fd;
+	int           file_flag;
+  //This flag is always 1 for a file, and always 0 for a folder (different typedef)
+  //Routines that handle both must test it, and then typecast the privdata pointer
+  //to the type that is appropriate for the given case. (see also D_PRIVATE typedef)
+	int           fd;
 	unsigned int  filePos;
 	int           mode;	//file open mode
 	unsigned int  sfnSector; //short filename sector  - write support

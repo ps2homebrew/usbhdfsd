@@ -197,8 +197,12 @@ typedef struct _fat_dir_chain_record {
 typedef struct _fat_dir {
 	unsigned char attr;		//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
 	unsigned char name[FAT_MAX_NAME];
-	unsigned char date[4];	//D:M:Yl:Yh
-	unsigned char time[3];  //H:M:S
+	unsigned char cdate[4];	//D:M:Yl:Yh
+	unsigned char ctime[3]; //H:M:S
+	unsigned char adate[4];	//D:M:Yl:Yh
+	unsigned char atime[3]; //H:M:S
+	unsigned char mdate[4];	//D:M:Yl:Yh
+	unsigned char mtime[3]; //H:M:S
 	unsigned int  size;		//file size, 0 for directory
 	unsigned int  lastCluster;
 	fat_dir_chain_record  chain[DIR_CHAIN_SIZE];  //cluser/offset cache - for seeking purpose
