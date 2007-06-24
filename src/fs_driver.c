@@ -201,7 +201,7 @@ int fs_init(iop_device_t *driver)
 }
 
 //---------------------------------------------------------------------------
-int fs_open(iop_file_t* fd, const char *name, int mode, ...) {
+int fs_open(iop_file_t* fd, const char *name, int mode) {
 	int index, index2;
 	int mode2;
 	int ret;
@@ -599,7 +599,7 @@ int fs_dclose (iop_file_t *fd)
 }
 
 //---------------------------------------------------------------------------
-int fs_dread  (iop_file_t *fd, void* data)
+int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 {
 	int notgood;
 	int ret;
@@ -610,7 +610,6 @@ int fs_dread  (iop_file_t *fd, void* data)
 	ret = fat_mountCheck();
 	if (ret < 0) { _fs_unlock(); return ret; }
 
-	fio_dirent_t *buffer = (fio_dirent_t *)data;
 	do {
 		if (((D_PRIVATE*)fd->privdata)->status)
 		{
@@ -671,11 +670,10 @@ int fs_dread  (iop_file_t *fd, void* data)
 }
 
 //---------------------------------------------------------------------------
-int fs_getstat(iop_file_t *fd, const char *name, void* data)
+int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 {
 	int ret;
 	unsigned int cluster = 0;
-	fio_stat_t *stat = (fio_stat_t *)data;
 	fat_dir fatdir;
 
 	_fs_lock();
@@ -703,7 +701,7 @@ int fs_getstat(iop_file_t *fd, const char *name, void* data)
 }
 
 //---------------------------------------------------------------------------
-int fs_chstat (iop_file_t *fd, const char *name, void *buffer, unsigned int a)
+int fs_chstat (iop_file_t *fd, const char *name, fio_stat_t *stat, unsigned int a)
 {
 	return fs_dummy();
 }
@@ -715,7 +713,7 @@ int fs_deinit (iop_device_t *fd)
 }
 
 //---------------------------------------------------------------------------
-int fs_format (iop_file_t *fd, ...)
+int fs_format (iop_file_t *fd)
 {
 	return fs_dummy();
 }
