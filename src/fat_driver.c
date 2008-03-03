@@ -961,7 +961,7 @@ int fat_mountCheck()
 
 	/* fs mounted but media is not ready - force unmount */
 	fat_forceUnmount();
-	return -10;
+	return -ENODEV;
 }
 
 //---------------------------------------------------------------------------

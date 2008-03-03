@@ -11,6 +11,7 @@
 #include <usbd.h>
 #include <usbd_macro.h>
 #include "mass_stor.h"
+#include <errno.h>
 
 //#define DEBUG  //comment out this line when not debugging
 
@@ -766,7 +767,7 @@ int mass_stor_warmup(mass_dev *dev) {
 	XPRINTF("mass_stor: warm up called ! \n");
 	if (!(dev->status & DEVICE_DETECTED)) {
 		printf("usb_mass: Error - no mass storage device found!\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	initCBWPacket(&cbw);
@@ -786,7 +787,7 @@ int mass_stor_warmup(mass_dev *dev) {
 
 	if (returnSize <= 0) {
 		printf("!Error: device not ready!\n");
-		return -1;
+		return -ENODEV;
 	}
 
     ready = 0;
@@ -925,7 +926,7 @@ int mass_stor_getStatus(mass_dev *dev)
 	if (!(dev->status & DEVICE_DETECTED))
 	{
 		XPRINTF("usb_mass: Error - no mass storage device found!\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	if (!(dev->status & DEVICE_CONFIGURED))
