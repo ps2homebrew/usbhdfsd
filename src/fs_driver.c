@@ -83,6 +83,44 @@ int InitFS()
 	return(0);
 }
 
+void fillStat(fio_stat_t *stat, fat_dir *fatdir)
+{
+	if (fatdir->attr & 0x10) {
+		stat->mode |= FIO_SO_IFDIR;
+	} else {
+		stat->mode |= FIO_SO_IFREG;
+	}
+
+	stat->size = fatdir->size;
+
+	//set created Date: Day, Month, Year
+	stat->ctime[4] = fatdir->cdate[0];
+	stat->ctime[5] = fatdir->cdate[1];
+	stat->ctime[6] = fatdir->cdate[2];
+	stat->ctime[7] = fatdir->cdate[3];
+
+	//set created Time: Hours, Minutes, Seconds
+	stat->ctime[3] = fatdir->ctime[0];
+	stat->ctime[2] = fatdir->ctime[1];
+	stat->ctime[1] = fatdir->ctime[2];
+
+	//set accessed Date: Day, Month, Year
+	stat->atime[4] = fatdir->adate[0];
+	stat->atime[5] = fatdir->adate[1];
+	stat->atime[6] = fatdir->adate[2];
+	stat->atime[7] = fatdir->adate[3];
+
+	//set modified Date: Day, Month, Year
+	stat->mtime[4] = fatdir->mdate[0];
+	stat->mtime[5] = fatdir->mdate[1];
+	stat->mtime[6] = fatdir->mdate[2];
+	stat->mtime[7] = fatdir->mdate[3];
+ 
+	//set modified Time: Hours, Minutes, Seconds
+	stat->mtime[3] = fatdir->mtime[0];
+	stat->mtime[2] = fatdir->mtime[1];
+	stat->mtime[1] = fatdir->mtime[2];
+}
 
 /*************************************************************************************/
 /*    File IO functions                                                              */
@@ -628,43 +666,8 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & 0x08) {	 /* volume name */
 			notgood = 1;
 		}
-		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & 0x10) {
-			buffer->stat.mode |= FIO_SO_IFDIR;
-		} else {
-			buffer->stat.mode |= FIO_SO_IFREG;
-		}
-
-		buffer->stat.size = (((D_PRIVATE*)fd->privdata)->fatdir).size;
-
+		fillStat(&buffer->stat, &((D_PRIVATE*)fd->privdata)->fatdir);
 		strcpy(buffer->name, (const char*)(((D_PRIVATE*)fd->privdata)->fatdir).name);
-
-		//set created Date: Day, Month, Year
-		buffer->stat.ctime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[0];
-		buffer->stat.ctime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[1];
-		buffer->stat.ctime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[2];
-		buffer->stat.ctime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).cdate[3];
-
-		//set created Time: Hours, Minutes, Seconds
-		buffer->stat.ctime[3] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[0];
-		buffer->stat.ctime[2] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[1];
-		buffer->stat.ctime[1] = (((D_PRIVATE*)fd->privdata)->fatdir).ctime[2];
-
- 		//set accessed Date: Day, Month, Year
-		buffer->stat.atime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[0];
-		buffer->stat.atime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[1];
-		buffer->stat.atime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[2];
-		buffer->stat.atime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).adate[3];
-
-		//set modified Date: Day, Month, Year
-		buffer->stat.mtime[4] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[0];
-		buffer->stat.mtime[5] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[1];
-		buffer->stat.mtime[6] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[2];
-		buffer->stat.mtime[7] = (((D_PRIVATE*)fd->privdata)->fatdir).mdate[3];
- 
-		//set modified Time: Hours, Minutes, Seconds
-		buffer->stat.mtime[3] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[0];
-		buffer->stat.mtime[2] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[1];
-		buffer->stat.mtime[1] = (((D_PRIVATE*)fd->privdata)->fatdir).mtime[2];
 
 		if (fat_getNextDirentry(&(((D_PRIVATE*)fd->privdata)->fatdir))<1)
 			((D_PRIVATE*)fd->privdata)->status = 1;	/* no more entries */
@@ -695,11 +698,7 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 	}
 
 	memset(stat, 0, sizeof(fio_stat_t));
-	stat->size = fatdir.size;
-	if (fatdir.attr & 10)
-		stat->mode |= FIO_SO_IFDIR;
-	else
-		stat->mode |= FIO_SO_IFREG;
+	fillStat(stat, &fatdir);
 
 	_fs_unlock();
 	return 0;
