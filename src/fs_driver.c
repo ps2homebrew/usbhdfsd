@@ -261,10 +261,10 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 	XPRINTF("fs_open called: %s mode=%X \n", name, mode) ;
 
 	//check if media mounted
-	ret = fat_mountCheck();
+	ret = fat_mountCheck(fd->unit);
 	if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	//check if the slot is free
 	index = fs_findFreeFileSlot(-1);
@@ -348,8 +348,10 @@ int fs_close(iop_file_t* fd) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
+
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	index = fs_findFileSlot(fd);
 	if (index < 0) {
@@ -361,10 +363,10 @@ int fs_close(iop_file_t* fd) {
 	if ((fsRec[index].mode & O_WRONLY)) {
 		//update direntry size and time
 		if (fsRec[index].sizeChange) {
-			fat_updateSfn(fsDir[index].size, fsRec[index].sfnSector, fsRec[index].sfnOffset);
+			fat_updateSfn(fatd, fsDir[index].size, fsRec[index].sfnSector, fsRec[index].sfnOffset);
 		}
 
-		FLUSH_SECTORS();
+		FLUSH_SECTORS(fatd->device);
 	}
 
     _fs_unlock();
@@ -379,7 +381,7 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
 	index = fs_findFileSlot(fd);
@@ -423,10 +425,10 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	updateClusterIndices = 0;
 
@@ -460,10 +462,10 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	index = fs_findFileSlot(fd);
 	if (index < 0) {
@@ -520,7 +522,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0)
     {
 		result = -1;
@@ -529,7 +531,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
  		return result;
 	}
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	index = fs_findFileSlotByName(name);
 	//store filename signature and time of removal
@@ -545,7 +547,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
 	}
 
 	result = fat_deleteFile(fatd, name, 0);
-	FLUSH_SECTORS();
+	FLUSH_SECTORS(fatd->device);
 	removalTime = getMillis(); //update removal time
 	removalResult = result;
 
@@ -564,10 +566,10 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	XPRINTF("fs_mkdir: name=%s \n",name);
 	//workaround for bug that invokes fioMkdir right after fioRemove
@@ -584,7 +586,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 	if (ret == 2) {
 		ret = -EEXIST;
 	}
-	FLUSH_SECTORS();
+	FLUSH_SECTORS(fatd->device);
 
     _fs_unlock();
 	return ret;
@@ -601,13 +603,13 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck();
+    ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	ret = fat_deleteFile(fatd, name, 1);
-	FLUSH_SECTORS();
+	FLUSH_SECTORS(fatd->device);
     _fs_unlock();
 	return ret;
 }
@@ -624,10 +626,10 @@ int fs_dopen  (iop_file_t *fd, const char *name)
     XPRINTF("fs_dopen called: unit %d name %s\n", fd->unit, name);
 
 	//check if media mounted
-	ret = fat_mountCheck();
+	ret = fat_mountCheck(fd->unit);
 	if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	fsCounter++;
 
@@ -679,10 +681,10 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
     XPRINTF("fs_dread called: unit %d\n", fd->unit);
 
 	//check if media mounted
-	ret = fat_mountCheck();
+	ret = fat_mountCheck(fd->unit);
 	if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	do {
 		if (((D_PRIVATE*)fd->privdata)->status)
@@ -718,10 +720,10 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 	_fs_lock();
 
 	//check if media mounted
-	ret = fat_mountCheck();
+	ret = fat_mountCheck(fd->unit);
 	if (ret < 0) { _fs_unlock(); return ret; }
 
-	fat_driver* fatd = fat_getData();
+	fat_driver* fatd = fat_getData(fd->unit);
 
 	XPRINTF("Calling fat_getFileStartCluster from fs_getstat\n");
 	ret = fat_getFileStartCluster(fatd, name, &cluster, &fatdir);
@@ -762,7 +764,7 @@ int fs_ioctl  (iop_file_t *fd, unsigned long request, void *data)
 
 	_fs_lock();
 	//check if media mounted
-	ret = fat_mountCheck();
+	ret = fat_mountCheck(fd->unit);
 	if (ret < 0) goto return_ret;
 
 	switch (request) {

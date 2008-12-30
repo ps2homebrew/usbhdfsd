@@ -4,6 +4,7 @@
 #include "fat.h"
 
 typedef struct _fat_driver {
+	int device;
 	int	mounted;	//disk mounted=1 not mounted=0
 	fat_part partTable;	//partition master record
 	fat_bpb  partBpb;	//partition bios parameter block
@@ -40,7 +41,7 @@ typedef struct _fat_driver {
 	unsigned int clStackLast; // last free cluster of the fat table
 } fat_driver;
 
-int fat_mountCheck(void);
+int fat_mountCheck(int device);
 void fat_forceUnmount(fat_driver* fatd); //dlanor: added for disconnection events (flush impossible)
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
 int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size);
@@ -55,8 +56,8 @@ unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
 unsigned int fat_cluster2sector(fat_driver* fatd, unsigned int cluster);
 
 int      fat_initDriver(fat_driver* fatd);
-void     fat_closeDriver(void);
-fat_driver * fat_getData(void);
+void     fat_closeDriver(fat_driver* fatd);
+fat_driver * fat_getData(int device);
 int      fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir);
 int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
 unsigned int fat_cluster2sector(fat_driver* fatd, unsigned int cluster);

@@ -13,7 +13,10 @@
 #include "mass_stor.h"
 #include <errno.h>
 
-//#define DEBUG  //comment out this line when not debugging
+#include <sysmem.h>
+#define malloc(a)	AllocSysMemory(0,(a), NULL)
+
+#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
 #include "usbhd_common.h"
@@ -81,7 +84,7 @@ static int returnCode;
 static int returnSize;
 static int residue;
 
-static mass_dev g_mass_device;		//current device
+static mass_dev* g_mass_device[NUM_DEVICES];
 
 
 
@@ -530,9 +533,36 @@ int usb_bulk_transfer(int pipe, void* buffer, int transferSize) {
 	return returnCode;
 }
 
-mass_dev* mass_stor_getDevice(void)
+mass_dev* mass_stor_getDevice(int device)
 {
-    return &g_mass_device;
+    return g_mass_device[device];
+}
+
+mass_dev* mass_stor_findDevice(int devId, int create)
+{
+    int i;
+    XPRINTF("usb_mass: mass_stor_findDevice devId %i\n", devId);
+    for (i = 0; i < NUM_DEVICES; ++i)
+    {
+        if (g_mass_device[i] == NULL)
+        {
+            if (create)
+            {
+                g_mass_device[i] = malloc(sizeof(mass_dev));
+                g_mass_device[i]->devId = devId;
+                g_mass_device[i]->status = 0;
+                return g_mass_device[i];
+            }
+            else
+                return NULL;
+        }
+        else if (g_mass_device[i]->devId == devId)
+        {
+            XPRINTF("usb_mass: mass_stor_findDevice exists %i\n", i);
+            return g_mass_device[i];
+        }
+    }
+    return NULL;
 }
 
 /* reads esctor group - up to 4096 bytes */
@@ -614,10 +644,13 @@ int mass_stor_probe(int devId)
 	UsbConfigDescriptor *config = NULL;
 	UsbInterfaceDescriptor *intf = NULL;
 
-    mass_dev* mass_device = &g_mass_device;
+	XPRINTF("usb_mass: probe: devId=%i\n", devId);
+
+    // TODO Dont always create
+    mass_dev* mass_device = mass_stor_findDevice(devId, 0);
     
 	/* only one device supported */
-	if(mass_device->status & DEVICE_DETECTED)
+	if((mass_device != NULL) && (mass_device->status & DEVICE_DETECTED))
 	{
 		XPRINTF("mass_stor: Error: only one mass storage device allowed ! \n");
 		return 0;
@@ -636,7 +669,7 @@ int mass_stor_probe(int devId)
 	/* read configuration */
 	config = (UsbConfigDescriptor*)UsbGetDeviceStaticDescriptor(devId, device, USB_DT_CONFIG);
 	if (config == NULL) {
-	      printf("ERROR: Couldn't get configuration descriptor\n");
+	      printf("mass_stor: Error: Couldn't get configuration descriptor\n");
 	      return 0;
 	}
 	/* check that at least one interface exists */
@@ -669,7 +702,7 @@ int mass_stor_connect(int devId)
 	mass_dev* dev;
 
 	printf ("usb_mass: connect: devId=%i\n", devId);
-	dev = &g_mass_device;
+	dev = mass_stor_findDevice(devId, 1);
 
 	/* only one mass device allowed */
 	if (dev->status & DEVICE_DETECTED) {
@@ -677,7 +710,8 @@ int mass_stor_connect(int devId)
 		return 1;
 	}
 
-	dev->devId = devId;
+	if (dev->devId != devId)
+        printf("usb_mass: Error - device id does not match !\n");
 	dev->bulkEpI = -1;
 	dev->bulkEpO = -1;
 	dev->controlEp = -1;
@@ -719,7 +753,7 @@ int mass_stor_connect(int devId)
 	/*store current configuration id - can't call set_configuration here */
 	dev->configId = config->bConfigurationValue;
 	dev->status |= DEVICE_DETECTED;
-	printf("usb_mass: connect ok: epI=%i, epO=%i \n", dev->bulkEpI, dev->bulkEpO);
+	XPRINTF("usb_mass: connect ok: epI=%i, epO=%i \n", dev->bulkEpI, dev->bulkEpO);
 
 	return 0;
 }
@@ -736,7 +770,6 @@ void mass_stor_release(mass_dev *dev)
 		UsbCloseEndpoint(dev->bulkEpO);
 	}
 
-	dev->devId = -1;
 	dev->bulkEpI = -1;
 	dev->bulkEpO = -1;
 	dev->controlEp = -1;
@@ -745,10 +778,16 @@ void mass_stor_release(mass_dev *dev)
 
 int mass_stor_disconnect(int devId) {
 	mass_dev* dev;
-	dev = &g_mass_device;
+	dev = mass_stor_findDevice(devId, 0);
 
 	printf ("usb_mass: disconnect: devId=%i\n", devId);
 
+    if (dev == NULL)
+    {
+        printf ("usb_mass: disconnect: no device storage!\n");
+        return 0;
+    }
+    
 	if ((dev->status & DEVICE_DETECTED) && devId == dev->devId)
 	{
 		mass_stor_release(dev);
@@ -916,6 +955,12 @@ int mass_stor_getStatus(mass_dev* mass_device)
 
 	XPRINTF("mass_stor: getting status... \n");
 
+    if (dev == NULL)
+    {
+		XPRINTF("usb_mass: Error - no mass storage device found!\n");
+		return -ENODEV;
+    }
+    
     if(_delay_detect)
     {
         // give the USB driver some time to detect the device
@@ -923,6 +968,8 @@ int mass_stor_getStatus(mass_dev* mass_device)
     	while(!(dev->status & DEVICE_DETECTED) && (--i > 0)) DelayThread(100);
     	_delay_detect = 0;
     }
+
+	XPRINTF("mass_stor: status %i \n", dev->status);
 
     // fail if the device is still not detected.
 	if (!(dev->status & DEVICE_DETECTED))
@@ -957,8 +1004,10 @@ void mass_stor_clearDisconnected(mass_dev* mass_device)
 
 int InitUSB()
 {
-	int ret;
-	g_mass_device.status = 0;
+    int i;
+	int ret = 0;
+    for (i = 0; i < NUM_DEVICES; ++i)
+        g_mass_device[i] = NULL;
 
 	driver.next 		= NULL;
 	driver.prev		    = NULL;

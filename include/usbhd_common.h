@@ -5,6 +5,8 @@
 #include <ioman.h>
 //#include "fat.h"
 
+#define NUM_DEVICES 4
+
 #define USB_SUBCLASS_MASS_RBC		0x01
 #define USB_SUBCLASS_MASS_ATAPI		0x02
 #define USB_SUBCLASS_MASS_QIC		0x03
