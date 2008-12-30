@@ -39,7 +39,6 @@
 #define MAX_CLUSTER_STACK 128
 
 
-extern unsigned char* sbuf; //sector buffer
 extern unsigned int cbuf[MAX_DIR_CLUSTER]; //cluster index buffer
 static unsigned char tbuf[512]; //temporary buffer
 
@@ -100,6 +99,7 @@ int fat_readEmptyClusters12(fat_bpb* bpb) {
 	unsigned int clusterValue;
 	unsigned char xbuf[4];
 	int oldClStackIndex;
+	unsigned char* sbuf = NULL; //sector buffer
 
 	oldClStackIndex = clStackIndex;
 
@@ -184,6 +184,8 @@ int fat_readEmptyClusters32(fat_bpb* bpb) {
 	fatStartSector = bpb->partStart + bpb->resSectors;
 
 	for (i = sectorSkip; i < bpb->fatSize && clStackIndex < MAX_CLUSTER_STACK ; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		ret = READ_SECTOR(fatStartSector + i,  sbuf);
 		if (ret < 0) {
 			printf("FAT driver:Read fat32 sector failed! sector=%i! \n", fatStartSector + i);
@@ -237,6 +239,8 @@ int fat_readEmptyClusters16(fat_bpb* bpb) {
 	fatStartSector = bpb->partStart + bpb->resSectors;
 
 	for (i = sectorSkip; i < bpb->fatSize && clStackIndex < MAX_CLUSTER_STACK ; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		ret = READ_SECTOR(fatStartSector + i,  sbuf);
 		if (ret < 0) {
 			printf("FAT driver:Read fat16 sector failed! sector=%i! \n", fatStartSector + i);
@@ -339,6 +343,7 @@ int fat_saveClusterRecord12(fat_bpb* bpb, unsigned int currentCluster, unsigned 
 
 	//save both fat tables
 	for (fatNumber = 0; fatNumber < bpb->fatCount; fatNumber++) {
+		unsigned char* sbuf = NULL; //sector buffer
 
 		fatSector  = bpb->partStart + bpb->resSectors + (fatNumber * bpb->fatSize);
 		fatSector += recordOffset / bpb->sectorSize;
@@ -406,6 +411,8 @@ int fat_saveClusterRecord16(fat_bpb* bpb, unsigned int currentCluster, unsigned 
 
 	//save both fat tables
 	for (fatNumber = 0; fatNumber < bpb->fatCount; fatNumber++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		fatSector  = bpb->partStart + bpb->resSectors + (fatNumber * bpb->fatSize);
 		fatSector += currentCluster / indexCount;
 
@@ -444,6 +451,8 @@ int fat_saveClusterRecord32(fat_bpb* bpb, unsigned int currentCluster, unsigned 
 
 	//save both fat tables
 	for (fatNumber = 0; fatNumber < bpb->fatCount; fatNumber++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		fatSector  = bpb->partStart + bpb->resSectors + (fatNumber * bpb->fatSize);
 		fatSector += currentCluster / indexCount;
 
@@ -1152,6 +1161,8 @@ int fat_fillDirentryInfo(fat_bpb* bpb, unsigned char* lname, unsigned char* snam
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
 	for (i = 0; i < dirSector && cont; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		//At cluster borders, get correct sector from cluster chain buffer
 		if ((*startCluster != 0) && (i % bpb->clusterSize == 0)) {
 			startSector = fat_cluster2sector(bpb, cbuf[(i / bpb->clusterSize)]) -i;
@@ -1289,6 +1300,8 @@ int enlargeDirentryClusterSpace(fat_bpb* bpb, unsigned int startCluster, int ent
 	// now clean the directory space
 	startSector = fat_cluster2sector(bpb, newCluster);
 	for (i = 0; i < bpb->clusterSize; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		ret = ALLOC_SECTOR(startSector + i, sbuf);
 		memset(sbuf, 0 , bpb->sectorSize); //fill whole sector with zeros
 		ret = WRITE_SECTOR(startSector + i);
@@ -1359,6 +1372,8 @@ int createDirectorySpace(fat_bpb* bpb, unsigned int dirCluster, unsigned int par
 
 	//go through all sectors of the cluster
 	for (i = 0; i < bpb->clusterSize; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		ret = READ_SECTOR(startSector + i, sbuf);
 		if (ret < 0) {
 			printf("FAT writer: read directory sector failed ! sector=%i\n", startSector + i);
@@ -1417,6 +1432,8 @@ int saveDirentry(fat_bpb* bpb, unsigned int startCluster, unsigned char * dbuf, 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
 	for (i = 0; i < dirSector && cont; i++) {
+		unsigned char* sbuf = NULL; //sector buffer
+
 		//At cluster borders, get correct sector from cluster chain buffer
 		if ((startCluster != 0) && (i % bpb->clusterSize == 0)) {
 			startSector = fat_cluster2sector(bpb, cbuf[(i / bpb->clusterSize)]) -i;
@@ -1709,7 +1726,9 @@ int fat_clearDirSpace(fat_bpb* bpb, unsigned char* lname, char directory, unsign
 	//now mark direntries as deleted
 	theSector = 0;
 	for (i = 0; i < deIdx; i++) {
-	        if (deSec[i] != theSector) {
+		unsigned char* sbuf = NULL; //sector buffer ????
+
+		if (deSec[i] != theSector) {
 			if (theSector > 0) {
 				ret = WRITE_SECTOR(theSector);
 				if (ret < 0) {
@@ -1757,6 +1776,7 @@ int fat_clearDirSpace(fat_bpb* bpb, unsigned char* lname, char directory, unsign
 int fat_truncateFile(fat_bpb* bpb, unsigned int cluster, unsigned int sfnSector, int sfnOffset ) {
 	int ret;
 	fat_direntry_sfn* dsfn;
+	unsigned char* sbuf = NULL; //sector buffer
 
 	if (cluster == 0 || sfnSector == 0) {
 		return -EFAULT;
@@ -1808,6 +1828,7 @@ int fat_truncateFile(fat_bpb* bpb, unsigned int cluster, unsigned int sfnSector,
 int fat_updateSfn(int size, unsigned int sfnSector, int sfnOffset ) {
 	int ret;
 	fat_direntry_sfn* dsfn;
+	unsigned char* sbuf = NULL; //sector buffer
 
 	if (sfnSector == 0) {
 		return -EFAULT;
@@ -2123,6 +2144,8 @@ int fat_writeFile(fat_bpb* bpb, fat_dir* fatDir, int* updateClusterIndices, unsi
 			startSector = fat_cluster2sector(bpb, cbuf[i]);
 			//process all sectors of the cluster (and skip leading sectors if needed)
 			for (j = 0 + sectorSkip; j < bpb->clusterSize && size > 0; j++) {
+				unsigned char* sbuf = NULL; //sector buffer
+
 				//TODO - do not read when writing to unallocated sectors
 				ret = READ_SECTOR(startSector + j, sbuf);
 				if (ret < 0) {
@@ -2162,6 +2185,7 @@ int fat_writeFile(fat_bpb* bpb, fat_dir* fatDir, int* updateClusterIndices, unsi
 //---------------------------------------------------------------------------
 int fat_allocSector(unsigned int sector, unsigned char** buf) {
 	int ret;
+	unsigned char* sbuf = NULL; //sector buffer
 
 	ret = ALLOC_SECTOR(sector, sbuf);
 	if (ret < 0) {

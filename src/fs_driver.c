@@ -56,9 +56,6 @@ fs_rec  fsRec[MAX_FILES]; //file info record
 fat_dir fsDir[MAX_FILES]; //directory entry
 static int fsCounter = 0;
 
-extern fat_part partTable;	//partition master record
-extern fat_bpb  partBpb;	//partition bios parameter block
-
 static iop_device_t fs_driver;
 static iop_device_ops_t fs_functarray;
 
@@ -267,6 +264,8 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 	ret = fat_mountCheck();
 	if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	//check if the slot is free
 	index = fs_findFreeFileSlot(-1);
 	if (index  < 0) { _fs_unlock(); return -EMFILE; }
@@ -296,7 +295,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 		fsRec[index].sfnSector = 0;
 		fsRec[index].sfnOffset = 0;
-		ret = fat_createFile(&partBpb, name, 0, escapeNotExist, &cluster, &fsRec[index].sfnSector, &fsRec[index].sfnOffset);
+		ret = fat_createFile(bpb, name, 0, escapeNotExist, &cluster, &fsRec[index].sfnSector, &fsRec[index].sfnOffset);
 		if (ret < 0) {
 		    _fs_unlock(); 
 			return ret;
@@ -304,14 +303,14 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 		//the file already exist but mode is set to truncate
 		if (ret == 2 && (mode & O_TRUNC)) {
 			XPRINTF("FAT I: O_TRUNC detected!\n");
-			fat_truncateFile(&partBpb, cluster, fsRec[index].sfnSector, fsRec[index].sfnOffset);
+			fat_truncateFile(bpb, cluster, fsRec[index].sfnSector, fsRec[index].sfnOffset);
 		}
 	}
 
 	//find the file
 	cluster = 0; //allways start from root
 	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
-	ret = fat_getFileStartCluster(&partBpb, name, &cluster, &fsDir[index]);
+	ret = fat_getFileStartCluster(bpb, name, &cluster, &fsDir[index]);
 	if ((fsDir[index].attr & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY) {
 		// Can't open a directory with fioOpen
 		_fs_unlock();
@@ -427,13 +426,15 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
     ret = fat_mountCheck();
     if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	updateClusterIndices = 0;
 
 	index = fs_findFileSlot(fd);
 	if (index < 0) { _fs_unlock(); return -1; }
 	if (size <= 0) { _fs_unlock(); return 0; }
 
-	result = fat_writeFile(&partBpb, &fsDir[index], &updateClusterIndices, fsRec[index].filePos, (unsigned char*) buffer, size);
+	result = fat_writeFile(bpb, &fsDir[index], &updateClusterIndices, fsRec[index].filePos, (unsigned char*) buffer, size);
 	if (result > 0) { //write succesful
 		fsRec[index].filePos += result;
 		if (fsRec[index].filePos > fsDir[index].size) {
@@ -441,7 +442,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 			fsRec[index].sizeChange = 1;
 			//if new clusters allocated - then update file cluster indices
 			if (updateClusterIndices) {
-				fat_setFatDirChain(&partBpb, &fsDir[index]);
+				fat_setFatDirChain(bpb, &fsDir[index]);
 			}
 		}
 	}
@@ -462,6 +463,8 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
     ret = fat_mountCheck();
     if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	index = fs_findFileSlot(fd);
 	if (index < 0) {
 	    _fs_unlock();
@@ -477,7 +480,7 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 		size = fsDir[index].size - fsRec[index].filePos;
 	}
 
-	result = fat_readFile(&partBpb, &fsDir[index], fsRec[index].filePos, (unsigned char*) buffer, size);
+	result = fat_readFile(bpb, &fsDir[index], fsRec[index].filePos, (unsigned char*) buffer, size);
 	if (result > 0) { //read succesful
 		fsRec[index].filePos += result;
 	}
@@ -526,6 +529,8 @@ int fs_remove (iop_file_t *fd, const char *name) {
  		return result;
 	}
 
+	fat_bpb* bpb = fat_getBpb();
+
 	index = fs_findFileSlotByName(name);
 	//store filename signature and time of removal
 	nameSignature = getNameSignature(name);
@@ -539,7 +544,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
 		return result;
 	}
 
-	result = fat_deleteFile(&partBpb, name, 0);
+	result = fat_deleteFile(bpb, name, 0);
 	FLUSH_SECTORS();
 	removalTime = getMillis(); //update removal time
 	removalResult = result;
@@ -562,6 +567,8 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
     ret = fat_mountCheck();
     if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	XPRINTF("fs_mkdir: name=%s \n",name);
 	//workaround for bug that invokes fioMkdir right after fioRemove
 	sig = getNameSignature(name);
@@ -571,7 +578,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 		return removalResult; //return the original return code from fs_remove
 	}
 
-	ret = fat_createFile(&partBpb, name, 1, 0, &cluster,  &sfnSector, &sfnOffset);
+	ret = fat_createFile(bpb, name, 1, 0, &cluster,  &sfnSector, &sfnOffset);
 
 	//directory of the same name already exist
 	if (ret == 2) {
@@ -597,7 +604,9 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
     ret = fat_mountCheck();
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	ret = fat_deleteFile(&partBpb, name, 1);
+	fat_bpb* bpb = fat_getBpb();
+
+	ret = fat_deleteFile(bpb, name, 1);
 	FLUSH_SECTORS();
     _fs_unlock();
 	return ret;
@@ -618,6 +627,8 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 	ret = fat_mountCheck();
 	if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	fsCounter++;
 
 	if( ((name[0] == '/') && (name[1] == '\0'))
@@ -627,7 +638,7 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 		is_root = 1;
 	}
 
-	ret = fat_getFirstDirentry((char*)name, &fatdir);
+	ret = fat_getFirstDirentry(bpb, (char*)name, &fatdir);
 
 	fd->privdata = (void*)malloc(sizeof(D_PRIVATE));
 	memset(fd->privdata, 0, sizeof(D_PRIVATE)); //NB: also implies "file_flag = 0;"
@@ -671,6 +682,8 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 	ret = fat_mountCheck();
 	if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	do {
 		if (((D_PRIVATE*)fd->privdata)->status)
 		{
@@ -687,7 +700,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 		fillStat(&buffer->stat, &((D_PRIVATE*)fd->privdata)->fatdir);
 		strcpy(buffer->name, (const char*)(((D_PRIVATE*)fd->privdata)->fatdir).name);
 
-		if (fat_getNextDirentry(&(((D_PRIVATE*)fd->privdata)->fatdir))<1)
+		if (fat_getNextDirentry(bpb, &(((D_PRIVATE*)fd->privdata)->fatdir))<1)
 			((D_PRIVATE*)fd->privdata)->status = 1;	/* no more entries */
 	} while (notgood);
 
@@ -708,8 +721,10 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 	ret = fat_mountCheck();
 	if (ret < 0) { _fs_unlock(); return ret; }
 
+	fat_bpb* bpb = fat_getBpb();
+
 	XPRINTF("Calling fat_getFileStartCluster from fs_getstat\n");
-	ret = fat_getFileStartCluster(&partBpb, name, &cluster, &fatdir);
+	ret = fat_getFileStartCluster(bpb, name, &cluster, &fatdir);
 	if (ret < 0) {
 		_fs_unlock();
 		return -1;
