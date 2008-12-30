@@ -85,7 +85,7 @@ int InitFS()
 
 void fillStat(fio_stat_t *stat, fat_dir *fatdir)
 {
-	if (fatdir->attr & 0x10) {
+	if (fatdir->attr & FAT_ATTR_DIRECTORY) {
 		stat->mode |= FIO_SO_IFDIR;
 	} else {
 		stat->mode |= FIO_SO_IFREG;
@@ -299,7 +299,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 	cluster = 0; //allways start from root
 	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
 	ret = fat_getFileStartCluster(&partBpb, name, &cluster, &fsDir[index]);
-	if ((fsDir[index].attr & 0x10) == 0x10) {
+	if ((fsDir[index].attr & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY) {
 		// Can't open a directory with fioOpen
 		_fs_unlock();
 		return -EISDIR;
@@ -663,7 +663,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 		notgood = 0;
 
 		memset(buffer, 0, sizeof(fio_dirent_t));
-		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & 0x08) {	 /* volume name */
+		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & FAT_ATTR_VOLUME_LABEL) {	 /* volume name */
 			notgood = 1;
 		}
 		fillStat(&buffer->stat, &((D_PRIVATE*)fd->privdata)->fatdir);

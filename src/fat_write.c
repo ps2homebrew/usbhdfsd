@@ -814,9 +814,9 @@ void setSfnEntry(unsigned char* shortName, char directory, unsigned char *buffer
 	for (i = 0; i < 3; i++) dsfn->ext[i]  = shortName[i+8];
 
 	if (directory > 0) {
-		dsfn->attr = 16; //directory bit set
+		dsfn->attr = FAT_ATTR_DIRECTORY;
 	} else {
-		dsfn->attr = 32; //ordinary file + archive bit set
+		dsfn->attr = FAT_ATTR_ARCHIVE;
 	}
 	dsfn->reservedNT = 0;
 	dsfn->clusterH[0] = (cluster & 0xFF0000) >> 16;
@@ -1146,7 +1146,7 @@ int fat_fillDirentryInfo(fat_bpb* bpb, unsigned char* lname, unsigned char* snam
 	dir.name[0] = 0;
 
 	j = 0;
-	if (directory) directory = 0x10;
+	if (directory) directory = FAT_ATTR_DIRECTORY;
 
 	fat_getDirentrySectorData(bpb, startCluster, &startSector, &dirSector);
 
@@ -1178,10 +1178,10 @@ int fat_fillDirentryInfo(fat_bpb* bpb, unsigned char* lname, unsigned char* snam
 			switch (cont) {
 				case 1: //short name
 					dir_used_mask[mask_ix] |= (1<<mask_sh);
-					if (!(dir.attr & 0x08)) { //not volume label
+					if (!(dir.attr & FAT_ATTR_VOLUME_LABEL)) { //not volume label
 						if ((strEqual(dir.sname, lname) == 0) || (strEqual(dir.name, lname) == 0) ) {
 							//file we want to create already exist - return the cluster of the file
-							if ((dir.attr & 0x10) != directory) {
+							if ((dir.attr & FAT_ATTR_DIRECTORY) != directory) {
 								//found directory but requested is file (and vice veresa)
 								if (directory) return -ENOTDIR;
 								return -EISDIR;
@@ -1202,7 +1202,7 @@ int fat_fillDirentryInfo(fat_bpb* bpb, unsigned char* lname, unsigned char* snam
 						//clear name strings
 						dir.sname[0] = 0;
 						dir.name[0] = 0;
-					}//ends "if(!(dir.attr & 0x08))"
+					}//ends "if(!(dir.attr & FAT_ATTR_VOLUME_LABEL))"
 					else { //dlanor: Volume label
 						deIdx = 0;
 					}

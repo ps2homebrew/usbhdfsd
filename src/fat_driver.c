@@ -741,7 +741,7 @@ int fat_getDirentryStartCluster(fat_bpb* bpb, unsigned char* dirName, unsigned i
 			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
 			cont = fat_getDirentry(dsfn, dlfn, &dir); //get single directory entry from sector buffer
 			if (cont == 1) { //when short file name entry detected
-				if (!(dir.attr & 0x08)) { //not volume label
+				if (!(dir.attr & FAT_ATTR_VOLUME_LABEL)) { //not volume label
 					if ((strEqual(dir.sname, dirName) == 0) ||
 						(strEqual(dir.name, dirName) == 0) ) {
 							XPRINTF("found! %s\n", dir.name);
@@ -752,7 +752,7 @@ int fat_getDirentryStartCluster(fat_bpb* bpb, unsigned char* dirName, unsigned i
 							XPRINTF("direntry %s found at cluster: %i \n", dirName, dir.cluster);
 							return dir.attr; //returns file or directory attr
 						}
-				}//ends "if(!(dir.attr & 0x08))"
+				}//ends "if(!(dir.attr & FAT_ATTR_VOLUME_LABEL))"
 				//clear name strings
 				dir.sname[0] = 0;
 				dir.name[0] = 0;
@@ -785,7 +785,7 @@ int fat_getFileStartCluster(fat_bpb* bpb, const char* fname, unsigned int* start
 		*startCluster = 0;
 		if (fatDir != NULL) {
 			memset(fatDir, 0, sizeof(fat_dir));
-			fatDir->attr |= 0x10;
+			fatDir->attr |= FAT_ATTR_DIRECTORY;
 		}
 		i++;
 	}
@@ -1052,7 +1052,7 @@ int fat_getFirstDirentry(char * dirName, fat_dir* fatDir) {
 		return -4;
 	}
 	//check that direntry is directory
-	if ((fatDir->attr & 0x10) == 0) {
+	if ((fatDir->attr & FAT_ATTR_DIRECTORY) == 0) {
 		return -3; //it's a file - exit
 	}
 	direntryCluster = startCluster;

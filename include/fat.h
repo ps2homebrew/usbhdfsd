@@ -27,6 +27,13 @@
 
 #define DIR_CHAIN_SIZE 32
 
+//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
+//#define FAT_ATTR_READONLY     0x01
+//#define FAT_ATTR_HIDDEN       0x02
+#define FAT_ATTR_VOLUME_LABEL 0x08
+#define FAT_ATTR_DIRECTORY    0x10
+#define FAT_ATTR_ARCHIVE      0x20
+
 typedef struct _part_raw_record {
 	unsigned char	active;		//Set to 80h if this partition is active / bootable
 	unsigned char	startH;		//Partition's starting head.
@@ -215,4 +222,5 @@ typedef struct _fat_dir_record { // 140 bytes
 	unsigned char time[3];  //H:M:S
 	unsigned int  size;		//file size, 0 for directory
 } fat_dir_record;
+
 #endif /* _FAT_H */
