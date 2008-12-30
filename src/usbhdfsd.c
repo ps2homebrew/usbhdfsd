@@ -8,6 +8,7 @@
 #include <loadcore.h>
 #include <stdio.h>
 
+extern int InitFAT();
 extern int InitFS();
 extern int InitUSB();
 
@@ -16,6 +17,13 @@ int _start( int argc, char **argv)
 	printf("USB HDD FileSystem Driver v%d.%d\n", MAJOR_VER, MINOR_VER);
 
 	FlushDcache();
+
+    // initialize the FAT driver
+    if(InitFAT() != 0)
+    {
+        printf("Error initializing FAT driver!\n");
+        return(1);
+    }
 
     // initialize the USB driver
 	if(InitUSB() != 0)

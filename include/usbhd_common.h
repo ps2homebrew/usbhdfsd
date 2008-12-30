@@ -33,9 +33,6 @@
 
 #define FAT_ERROR           -1
 
-#define MAX_DIR_CLUSTER 512
-
-
 int fs_init   (iop_device_t *driver); 
 int fs_open   (iop_file_t* , const char *name, int mode);
 int fs_lseek  (iop_file_t* , unsigned long offset, int whence);
