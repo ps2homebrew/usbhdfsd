@@ -782,6 +782,11 @@ int fat_getFileStartCluster(fat_bpb* bpb, const char* fname, unsigned int* start
 	i=0;
 
 	if (fname[i] == '/') {
+		*startCluster = 0;
+		if (fatDir != NULL) {
+			memset(fatDir, 0, sizeof(fat_dir));
+			fatDir->attr |= 0x10;
+		}
 		i++;
 	}
 
@@ -803,7 +808,7 @@ int fat_getFileStartCluster(fat_bpb* bpb, const char* fname, unsigned int* start
 	XPRINTF("Ready to get cluster for file \"%s\"\n", tmpName);
 	if (fatDir != NULL) {
 		//if the last char of the name was slash - the name was already found -exit
-		if (offset == 0 && i > 1) {
+		if (offset == 0) {
 			XPRINTF("Exiting from fat_getFileStartCluster with a folder\n");
 			return 1;
 		}
@@ -1042,41 +1047,15 @@ int fat_getFirstDirentry(char * dirName, fat_dir* fatDir) {
 		return ret;
 	}
 
-	//When used as an absolute path, lots of alternatives evaluate to root...
-	if(	(dirName == NULL)              //NULL => root
-		||(dirName[0] == 0)              //""   => root
-		||( (dirName[0] == '.')
-			&&(	(dirName[1] == 0)          //"."  => root
-				||(	(dirName[1] == '.')
-					&&(dirName[2] == 0)        //".." => root
-					)
-				)
-			)
-		||( (dirName[0]=='/' || dirName[0]=='\\') //Treat slash and backslash the same
-			&&( (dirName[1] == 0)                   //"/"   => root
-				||( (dirName[0] == '.')
-					&&(	(dirName[1] == 0)               //"/."  => root
-						||(	(dirName[1] == '.')
-							&&(dirName[2] == 0)             //"/.." => root
-							)
-						)
-					)
-				)
-			)
-		) //Complex condition to accept various root directory reference methods
-	{
-		direntryCluster = 0;
-	} else {
-		ret = fat_getFileStartCluster(&partBpb, dirName, &startCluster, fatDir);
-		if (ret < 0) { //dir name not found
-			return -4;
-		}
-		//check that direntry is directory
-		if ((fatDir->attr & 0x10) == 0) {
-			return -3; //it's a file - exit
-		}
-		direntryCluster = startCluster;
+	ret = fat_getFileStartCluster(&partBpb, dirName, &startCluster, fatDir);
+	if (ret < 0) { //dir name not found
+		return -4;
 	}
+	//check that direntry is directory
+	if ((fatDir->attr & 0x10) == 0) {
+		return -3; //it's a file - exit
+	}
+	direntryCluster = startCluster;
 	direntryIndex = 0;
 	return fat_getNextDirentry(fatDir);
 }
