@@ -38,6 +38,19 @@
 
 #define FLUSH_SECTORS		scache_flushSectors
 
+typedef struct _fs_rec {
+	int           file_flag;
+  //This flag is always 1 for a file, and always 0 for a folder (different typedef)
+  //Routines that handle both must test it, and then typecast the privdata pointer
+  //to the type that is appropriate for the given case. (see also D_PRIVATE typedef)
+	int           fd;
+	unsigned int  filePos;
+	int           mode;	//file open mode
+	unsigned int  sfnSector; //short filename sector  - write support
+	int           sfnOffset; //short filename offset  - write support
+	int           sizeChange; //flag
+} fs_rec;
+
 #define MAX_FILES 16
 fs_rec  fsRec[MAX_FILES]; //file info record
 fat_dir fsDir[MAX_FILES]; //directory entry
@@ -598,6 +611,8 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 	int ret, is_root = 0;
 
 	_fs_lock();
+    
+    XPRINTF("fs_dopen called: unit %d name %s\n", fd->unit, name);
 
 	//check if media mounted
 	ret = fat_mountCheck();
@@ -636,6 +651,7 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 int fs_dclose (iop_file_t *fd)
 {
 	_fs_lock();
+    XPRINTF("fs_dclose called: unit %d\n", fd->unit);
 	free(fd->privdata);
 	_fs_unlock();
 	return 0;
@@ -648,6 +664,8 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 	int ret;
 
 	_fs_lock();
+    
+    XPRINTF("fs_dread called: unit %d\n", fd->unit);
 
 	//check if media mounted
 	ret = fat_mountCheck();

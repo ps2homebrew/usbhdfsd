@@ -43,18 +43,18 @@ typedef struct _cache_record
 } cache_record;
 
 
-int sectorSize;
-int indexLimit;
-unsigned char* sectorBuf = NULL;		//sector content - the cache buffer
-cache_record rec[CACHE_SIZE];	//cache info record
+static int sectorSize;
+static int indexLimit;
+static unsigned char* sectorBuf = NULL;		//sector content - the cache buffer
+static cache_record rec[CACHE_SIZE];	//cache info record
 
 //statistical infos
-unsigned int cacheAccess;
-unsigned int cacheHits;
-unsigned int writeFlag;
-unsigned int flushCounter;
+static unsigned int cacheAccess;
+static unsigned int cacheHits;
+static unsigned int writeFlag;
+static unsigned int flushCounter;
 
-unsigned int cacheDumpCounter = 0;
+static unsigned int cacheDumpCounter = 0;
 
 //---------------------------------------------------------------------------
 void initRecords()

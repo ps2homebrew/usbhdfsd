@@ -3,24 +3,10 @@
  */
 
 #define MAJOR_VER 1
-#define MINOR_VER 0
+#define MINOR_VER 1
 
-#include <tamtypes.h>
-#include <thbase.h>
-#include <thsemap.h>
-#include <sifrpc.h>
 #include <loadcore.h>
-#include <ioman.h>
-#include <sysclib.h>
 #include <stdio.h>
-
-#include <cdvdman.h>
-#include <sysclib.h>
-
-#include "mass_stor.h"
-#include "fat_driver.h"
-#include "mass_debug.h"
-#include "usbhd_common.h"
 
 extern int InitFS();
 extern int InitUSB();

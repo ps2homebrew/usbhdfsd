@@ -7,5 +7,9 @@ int mass_stor_connect(int devId);
 int mass_stor_probe(int devId);
 int mass_stor_readSector4096(unsigned int sector, unsigned char* buffer);
 int mass_stor_writeSector4096(unsigned int sector, unsigned char* buffer);
+int mass_stor_getStatus(void);
+void mass_stor_clearDisconnected(void);
+unsigned mass_stor_getMaxLBA(void);
+unsigned mass_stor_getSectorSize(void);
 
 #endif

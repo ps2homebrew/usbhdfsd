@@ -11,7 +11,7 @@
  * See the file LICENSE included with this distribution for licensing terms.
  */
 //---------------------------------------------------------------------------
-#include <tamtypes.h>
+//#include <tamtypes.h>
 #include <cdvdman.h>
 #include <sysclib.h>
 #include <stdio.h>
@@ -22,6 +22,7 @@
 #include "fat_driver.h"
 #include "scache.h"
 #include "usbhd_common.h"
+#include "mass_stor.h"
 
 //#define DEBUG  //comment out this line when not debugging
 
@@ -37,29 +38,25 @@
 
 #define MAX_CLUSTER_STACK 128
 
-#define MEMCPY(a,b,c) memcpy((a),(b),(c))
-
-#define SECTOR_SIZE Size_Sector
-extern unsigned Size_Sector; // store size of sector from usb mass
 
 extern unsigned char* sbuf; //sector buffer
 extern unsigned int cbuf[MAX_DIR_CLUSTER]; //cluster index buffer
-unsigned char tbuf[512]; //temporary buffer
+static unsigned char tbuf[512]; //temporary buffer
 
 /* enough for long filename of length 260 characters (20*13) and one short filename */
 #define MAX_DE_STACK 21
-unsigned int deSec[MAX_DE_STACK]; //direntry sector
-int          deOfs[MAX_DE_STACK]; //direntry offset
-int          deIdx = 0; //direntry index
+static unsigned int deSec[MAX_DE_STACK]; //direntry sector
+static int          deOfs[MAX_DE_STACK]; //direntry offset
+static int          deIdx = 0; //direntry index
 
 #define SEQ_MASK_SIZE 2048         //Allow 2K files per directory
-u8 seq_mask[SEQ_MASK_SIZE/8];      //bitmask for consumed seq numbers
+static u8 seq_mask[SEQ_MASK_SIZE/8];      //bitmask for consumed seq numbers
 #define DIR_MASK_SIZE 2048*11      //Allow 2K maxed fullnames per directory
-u8 dir_used_mask[DIR_MASK_SIZE/8]; //bitmask for used directory entries
+static u8 dir_used_mask[DIR_MASK_SIZE/8]; //bitmask for used directory entries
 
-unsigned int clStack[MAX_CLUSTER_STACK]; //cluster allocation stack
-int clStackIndex = 0;
-unsigned int clStackLast = 0; // last free cluster of the fat table
+static unsigned int clStack[MAX_CLUSTER_STACK]; //cluster allocation stack
+static int clStackIndex = 0;
+static unsigned int clStackLast = 0; // last free cluster of the fat table
 
 //---------------------------------------------------------------------------
 /*
@@ -1150,7 +1147,7 @@ int fat_fillDirentryInfo(fat_bpb* bpb, unsigned char* lname, unsigned char* snam
 
 	fat_getDirentrySectorData(bpb, startCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * Size_Sector, dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -1415,7 +1412,7 @@ int saveDirentry(fat_bpb* bpb, unsigned int startCluster, unsigned char * dbuf, 
 
 	fat_getDirentrySectorData(bpb, &startCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", startCluster, startSector, startSector * Size_Sector, dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", startCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -2095,7 +2092,7 @@ int fat_writeFile(fat_bpb* bpb, fat_dir* fatDir, int* updateClusterIndices, unsi
 		return -EFAULT;
 	}
 
-	bufSize = SECTOR_SIZE;
+	bufSize = mass_stor_getSectorSize();
 	nextChain = 1;
 	clusterChainStart = 1;
 
@@ -2137,11 +2134,11 @@ int fat_writeFile(fat_bpb* bpb, fat_dir* fatDir, int* updateClusterIndices, unsi
 				if (size < bufSize) {
 					bufSize = size + dataSkip;
 				}
-				if (bufSize > SECTOR_SIZE) {
-					bufSize = SECTOR_SIZE;
+				if (bufSize > mass_stor_getSectorSize()) {
+					bufSize = mass_stor_getSectorSize();
 				}
 				XPRINTF("memcopy dst=%i, src=%i, size=%i  bufSize=%i \n", dataSkip, bufferPos,bufSize-dataSkip, bufSize);
-				MEMCPY(sbuf + dataSkip, buffer+bufferPos, bufSize - dataSkip);
+				memcpy(sbuf + dataSkip, buffer+bufferPos, bufSize - dataSkip);
 				ret = WRITE_SECTOR(startSector + j);
 				if (ret < 0) {
 					printf("Write sector failed ! sector=%i\n", startSector + j);
@@ -2151,7 +2148,7 @@ int fat_writeFile(fat_bpb* bpb, fat_dir* fatDir, int* updateClusterIndices, unsi
 				size-= (bufSize - dataSkip);
 				bufferPos +=  (bufSize - dataSkip);
 				dataSkip = 0;
-				bufSize = SECTOR_SIZE;
+				bufSize = mass_stor_getSectorSize();
 			}
 			sectorSkip = 0;
 		}
@@ -2172,7 +2169,7 @@ int fat_allocSector(unsigned int sector, unsigned char** buf) {
 		return -1;
 	}
 	*buf = sbuf;
-	return Size_Sector;
+	return mass_stor_getSectorSize();
 }
 
 //---------------------------------------------------------------------------
@@ -2184,7 +2181,7 @@ int fat_writeSector(unsigned int sector) {
 		printf("Write sector failed ! sector=%i\n", sector);
 		return -1;
 	}
-	return Size_Sector;
+	return mass_stor_getSectorSize();
 }
 
 //---------------------------------------------------------------------------
