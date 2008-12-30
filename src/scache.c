@@ -24,8 +24,8 @@
 //---------------------------------------------------------------------------
 // Modified Hermes
 //always read 4096 bytes from sector (the rest bytes is stored in the cache)
-#define READ_SECTOR_4096(a, b)	mass_stor_readSector4096((a), (b))
-#define WRITE_SECTOR_4096(a, b)	mass_stor_writeSector4096((a), (b))
+#define READ_SECTOR_4096(d, a, b)	mass_stor_readSector4096((d), (a), (b))
+#define WRITE_SECTOR_4096(d, a, b)	mass_stor_writeSector4096((d), (a), (b))
 
 #include "mass_debug.h"
 
@@ -54,7 +54,6 @@ static unsigned int cacheHits;
 static unsigned int writeFlag;
 static unsigned int flushCounter;
 
-static unsigned int cacheDumpCounter = 0;
 
 //---------------------------------------------------------------------------
 void initRecords()
@@ -125,7 +124,7 @@ int getIndexWrite(unsigned int sector) {
 	//this sector is dirty - we need to flush it first
 	if (rec[index].writeDirty) {
 		XPRINTF("scache: getIndexWrite: sector is dirty : %d   index=%d \n", rec[index].sector, index);
-		ret = WRITE_SECTOR_4096(rec[index].sector, sectorBuf + (index * 4096));
+		ret = WRITE_SECTOR_4096(mass_stor_getDevice(), rec[index].sector, sectorBuf + (index * 4096));
 		rec[index].writeDirty = 0;
 		//TODO - error handling
 		if (ret < 0) {
@@ -160,7 +159,7 @@ int scache_flushSectors() {
 	for (i = 0; i < CACHE_SIZE; i++) {
 		if (rec[i].writeDirty) {
 			XPRINTF("scache: flushSectors dirty index=%d sector=%d \n", i, rec[i].sector);
-			ret = WRITE_SECTOR_4096(rec[i].sector, sectorBuf + (i * 4096));
+			ret = WRITE_SECTOR_4096(mass_stor_getDevice(), rec[i].sector, sectorBuf + (i * 4096));
 			rec[i].writeDirty = 0;
 			//TODO - error handling
 			if (ret < 0) {
@@ -196,7 +195,7 @@ int scache_readSector(unsigned int sector, void** buf) {
 	alignedSector = (sector/indexLimit)*indexLimit;
 	index = getIndexWrite(alignedSector);
 	XPRINTF("cache: indexWrite=%i slot=%d  alignedSector=%i\n", index, index / indexLimit, alignedSector);
-	ret = READ_SECTOR_4096(alignedSector, sectorBuf + (index * sectorSize));
+	ret = READ_SECTOR_4096(mass_stor_getDevice(), alignedSector, sectorBuf + (index * sectorSize));
 
 	if (ret < 0) {
 		return ret;

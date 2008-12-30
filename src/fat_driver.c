@@ -352,10 +352,11 @@ void fat_getPartitionTable(fat_driver* fatd)
         if ( fatd->workPartition == -1 )
         {  // no partition table detected
             // try to use "floppy" option
+            mass_dev* mass_device = mass_stor_getDevice();
             fatd->workPartition = 0;
             part -> record[ 0 ].sid   =
             part -> record[ 0 ].start = 0;
-            part -> record[ 0 ].count = mass_stor_getMaxLBA();
+            part -> record[ 0 ].count = mass_device->maxLBA;
         }
     }
 }
@@ -703,6 +704,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 	int cont;
 	int ret;
 	int dirPos;
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	cont = 1;
 	XPRINTF("\n");
@@ -713,7 +715,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 
 	fat_getDirentrySectorData(fatd, startCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -851,6 +853,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 	int sectorSkip;
 	int clusterSkip;
 	int dataSkip;
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	unsigned int bufferPos;
 	unsigned int fileCluster;
@@ -872,7 +875,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 		return 0;
 	}
 
-	bufSize = mass_stor_getSectorSize();
+	bufSize = mass_device->sectorSize;
 	nextChain = 1;
 	clusterChainStart = 1;
 
@@ -915,15 +918,15 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 				if (size < bufSize) {
 					bufSize = size + dataSkip;
 				}
-				if (bufSize > mass_stor_getSectorSize()) {
-					bufSize = mass_stor_getSectorSize();
+				if (bufSize > mass_device->sectorSize) {
+					bufSize = mass_device->sectorSize;
 				}
 				XPRINTF("memcopy dst=%i, src=%i, size=%i  bufSize=%i \n", bufferPos, dataSkip, bufSize-dataSkip, bufSize);
 				memcpy(buffer+bufferPos, sbuf + dataSkip, bufSize - dataSkip);
 				size-= (bufSize - dataSkip);
 				bufferPos +=  (bufSize - dataSkip);
 				dataSkip = 0;
-				bufSize = mass_stor_getSectorSize();
+				bufSize = mass_device->sectorSize;
 			}
 			sectorSkip = 0;
 		}
@@ -939,8 +942,9 @@ int fat_mountCheck()
     fat_driver* fatd = &g_fatd;
 	int mediaStatus;
 	int ret;
-
-	mediaStatus = mass_stor_getStatus();
+	mass_dev* mass_device = mass_stor_getDevice();
+    
+	mediaStatus = mass_stor_getStatus(mass_device);
 	if (mediaStatus < 0)
 	{
 		fat_forceUnmount(fatd);
@@ -951,7 +955,7 @@ int fat_mountCheck()
 		/* in the meantime the media was reconnected and maybe changed - force unmount*/
 		if((mediaStatus & DEVICE_DISCONNECTED) == DEVICE_DISCONNECTED) {
 			fat_forceUnmount(fatd);
-			mass_stor_clearDisconnected();
+			mass_stor_clearDisconnected(mass_device);
 		}
 
 		if (fatd->mounted) {
@@ -979,6 +983,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
 	int ret;
 	int dirPos;
 	unsigned int dirCluster;
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	//the getFirst function was not called
 	if (fatd->direntryCluster == 0xFFFFFFFF || fatDir == NULL) {
@@ -993,7 +998,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
 
 	fat_getDirentrySectorData(fatd, &dirCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", dirCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", dirCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -1062,7 +1067,7 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir* fatDir) {
 //---------------------------------------------------------------------------
 int fat_initDriver(fat_driver* fatd) {
 	int ret = 0;
-
+	mass_dev* mass_device = mass_stor_getDevice();
     fatd->mounted = 0;
 
 	fatd->lastChainCluster = 0xFFFFFFFF;
@@ -1071,7 +1076,7 @@ int fat_initDriver(fat_driver* fatd) {
 	fatd->direntryCluster = 0xFFFFFFFF;
 	fatd->direntryIndex = 0;
 
-	ret = DISK_INIT("disk1.bin", mass_stor_getSectorSize()); // modified by Hermes
+	ret = DISK_INIT("disk1.bin", mass_device->sectorSize); // modified by Hermes
 	if (ret < 0) {
 		printf ("fat_driver: disk init failed \n" );
 		return ret;
@@ -1106,6 +1111,7 @@ fat_driver * fat_getData() {
 int fat_readSector(unsigned int sector, unsigned char** buf)
 {
 	int ret;
+	mass_dev* mass_device = mass_stor_getDevice();
 	unsigned char* sbuf = NULL; //sector buffer
 
 	ret = READ_SECTOR(sector, sbuf);
@@ -1114,7 +1120,7 @@ int fat_readSector(unsigned int sector, unsigned char** buf)
 		return -1;
 	}
 	*buf = sbuf;
-	return mass_stor_getSectorSize();
+	return mass_device->sectorSize;
 }
 //---------------------------------------------------------------------------
 //End of file:  fat_driver.c

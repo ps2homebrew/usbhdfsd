@@ -1121,7 +1121,8 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 	int dirPos;
 	int seq;
 	int mask_ix, mask_sh;
-
+	mass_dev* mass_device = mass_stor_getDevice();
+    
 	memset(fatd->dir_used_mask, 0, DIR_MASK_SIZE/8);
 	memset(fatd->seq_mask, 0, SEQ_MASK_SIZE/8);
 
@@ -1135,7 +1136,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 
 	fat_getDirentrySectorData(fatd, startCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -1397,6 +1398,7 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 	int dirPos;
 	int entryEndIndex;
 	int writeFlag;
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	cont = 1;
 	//clear name strings
@@ -1406,7 +1408,7 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 
 	fat_getDirentrySectorData(fatd, &startCluster, &startSector, &dirSector);
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", startCluster, startSector, startSector * mass_stor_getSectorSize(), dirSector);
+	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -2039,6 +2041,7 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 
 	int clusterChainStart;
 
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	//check wether we have enough clusters allocated
 	i = fatd->partBpb.clusterSize * fatd->partBpb.sectorSize; //the size (in bytes) of the one cluster
@@ -2092,7 +2095,7 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 		return -EFAULT;
 	}
 
-	bufSize = mass_stor_getSectorSize();
+	bufSize = mass_device->sectorSize;
 	nextChain = 1;
 	clusterChainStart = 1;
 
@@ -2136,8 +2139,8 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 				if (size < bufSize) {
 					bufSize = size + dataSkip;
 				}
-				if (bufSize > mass_stor_getSectorSize()) {
-					bufSize = mass_stor_getSectorSize();
+				if (bufSize > mass_device->sectorSize) {
+					bufSize = mass_device->sectorSize;
 				}
 				XPRINTF("memcopy dst=%i, src=%i, size=%i  bufSize=%i \n", dataSkip, bufferPos,bufSize-dataSkip, bufSize);
 				memcpy(sbuf + dataSkip, buffer+bufferPos, bufSize - dataSkip);
@@ -2150,7 +2153,7 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 				size-= (bufSize - dataSkip);
 				bufferPos +=  (bufSize - dataSkip);
 				dataSkip = 0;
-				bufSize = mass_stor_getSectorSize();
+				bufSize = mass_device->sectorSize;
 			}
 			sectorSkip = 0;
 		}
@@ -2164,6 +2167,7 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 //---------------------------------------------------------------------------
 int fat_allocSector(unsigned int sector, unsigned char** buf) {
 	int ret;
+	mass_dev* mass_device = mass_stor_getDevice();
 	unsigned char* sbuf = NULL; //sector buffer
 
 	ret = ALLOC_SECTOR(sector, sbuf);
@@ -2172,19 +2176,20 @@ int fat_allocSector(unsigned int sector, unsigned char** buf) {
 		return -1;
 	}
 	*buf = sbuf;
-	return mass_stor_getSectorSize();
+	return mass_device->sectorSize;
 }
 
 //---------------------------------------------------------------------------
 int fat_writeSector(unsigned int sector) {
 	int ret;
+	mass_dev* mass_device = mass_stor_getDevice();
 
 	ret = WRITE_SECTOR(sector);
 	if (ret < 0) {
 		printf("Write sector failed ! sector=%i\n", sector);
 		return -1;
 	}
-	return mass_stor_getSectorSize();
+	return mass_device->sectorSize;
 }
 
 //---------------------------------------------------------------------------

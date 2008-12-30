@@ -20,24 +20,6 @@
 
 #define getBI32(__buf) ((((u8 *) (__buf))[3] << 0) | (((u8 *) (__buf))[2] << 8) | (((u8 *) (__buf))[1] << 16) | (((u8 *) (__buf))[0] << 24))
 
-typedef struct _mass_dev
-{
-	int controlEp;		//config endpoint id
-	int bulkEpI;		//in endpoint id
-	unsigned char bulkEpIAddr; // in endpoint address
-	int bulkEpO;		//out endpoint id
-	unsigned char bulkEpOAddr; // out endpoint address
-	int packetSzI;		//packet size in
-	int packetSzO;		//packet size out
-	int devId;		//device id
-	int configId;	//configuration id
-	int status;
-	int interfaceNumber;	//interface number
-	int interfaceAlt;	//interface alternate setting
-	unsigned sectorSize; // = 512; // store size of sector from usb mass
-	unsigned maxLBA;
-} mass_dev;
-
 /*
 typedef struct _read_info {
 	mass_dev* dev;
@@ -99,7 +81,7 @@ static int returnCode;
 static int returnSize;
 static int residue;
 
-static mass_dev mass_device;		//current device
+static mass_dev g_mass_device;		//current device
 
 
 
@@ -548,9 +530,14 @@ int usb_bulk_transfer(int pipe, void* buffer, int transferSize) {
 	return returnCode;
 }
 
+mass_dev* mass_stor_getDevice(void)
+{
+    return &g_mass_device;
+}
+
 /* reads esctor group - up to 4096 bytes */
 /* Modified by Hermes: read 4096 bytes */
-int mass_stor_readSector4096(unsigned int sector, unsigned char* buffer) {
+int mass_stor_readSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer) {
 	cbw_packet cbw;
 	int stat;
 
@@ -558,24 +545,24 @@ int mass_stor_readSector4096(unsigned int sector, unsigned char* buffer) {
 
 	initCBWPacket(&cbw);
 
-	cbw_scsi_read_sector(&cbw, sector, mass_device.sectorSize, 4096/mass_device.sectorSize);  // Added by Hermes
+	cbw_scsi_read_sector(&cbw, sector, mass_device->sectorSize, 4096/mass_device->sectorSize);  // Added by Hermes
 
 	stat = 1;
 	while (stat != 0) {
 		XPRINTF("-READ SECTOR COMMAND: %i\n", sector);
-		usb_bulk_command(&mass_device, &cbw);
+		usb_bulk_command(mass_device, &cbw);
 
 		XPRINTF("-READ SECTOR DATA\n");
-		stat = usb_bulk_transfer(mass_device.bulkEpI, buffer, 4096); //Modified by Hermes
+		stat = usb_bulk_transfer(mass_device->bulkEpI, buffer, 4096); //Modified by Hermes
 
        	XPRINTF("-READ SECTOR STATUS\n");
-		stat = usb_bulk_manage_status(&mass_device, -TAG_READ);
+		stat = usb_bulk_manage_status(mass_device, -TAG_READ);
 	}
 	return 4096; //Modified by Hermes
 }
 
 /* write sector group - up to 4096 bytes */
-int mass_stor_writeSector4096(unsigned int sector, unsigned char* buffer) {
+int mass_stor_writeSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer) {
 	cbw_packet cbw;
 	int stat;
 
@@ -583,18 +570,18 @@ int mass_stor_writeSector4096(unsigned int sector, unsigned char* buffer) {
 
 	initCBWPacket(&cbw);
 
-	cbw_scsi_write_sector(&cbw, sector, mass_device.sectorSize, 4096/mass_device.sectorSize);
+	cbw_scsi_write_sector(&cbw, sector, mass_device->sectorSize, 4096/mass_device->sectorSize);
 
 	stat = 1;
 	while (stat != 0) {
 		XPRINTF("-WRITE SECTOR COMMAND: %i\n", sector);
-		usb_bulk_command(&mass_device, &cbw);
+		usb_bulk_command(mass_device, &cbw);
 
 		XPRINTF("-WRITE SECTOR DATA\n");
-		stat = usb_bulk_transfer(mass_device.bulkEpO, buffer, 4096);
+		stat = usb_bulk_transfer(mass_device->bulkEpO, buffer, 4096);
 
        	XPRINTF("-READ SECTOR STATUS\n");
-		stat = usb_bulk_manage_status(&mass_device, -TAG_WRITE);
+		stat = usb_bulk_manage_status(mass_device, -TAG_WRITE);
 	}
 	return 4096;
 }
@@ -627,8 +614,10 @@ int mass_stor_probe(int devId)
 	UsbConfigDescriptor *config = NULL;
 	UsbInterfaceDescriptor *intf = NULL;
 
+    mass_dev* mass_device = &g_mass_device;
+    
 	/* only one device supported */
-	if(mass_device.status & DEVICE_DETECTED)
+	if(mass_device->status & DEVICE_DETECTED)
 	{
 		XPRINTF("mass_stor: Error: only one mass storage device allowed ! \n");
 		return 0;
@@ -680,7 +669,7 @@ int mass_stor_connect(int devId)
 	mass_dev* dev;
 
 	printf ("usb_mass: connect: devId=%i\n", devId);
-	dev = &mass_device;
+	dev = &g_mass_device;
 
 	/* only one mass device allowed */
 	if (dev->status & DEVICE_DETECTED) {
@@ -756,7 +745,7 @@ void mass_stor_release(mass_dev *dev)
 
 int mass_stor_disconnect(int devId) {
 	mass_dev* dev;
-	dev = &mass_device;
+	dev = &g_mass_device;
 
 	printf ("usb_mass: disconnect: devId=%i\n", devId);
 
@@ -911,8 +900,8 @@ int mass_stor_warmup(mass_dev *dev) {
 		return 1;
 	}
 
-	mass_device.sectorSize = getBI32 ( &buffer[ 4 ] );
-	mass_device.maxLBA    = getBI32 ( &buffer[ 0 ] );
+	dev->sectorSize = getBI32 ( &buffer[ 4 ] );
+	dev->maxLBA    = getBI32 ( &buffer[ 0 ] );
 
 	return 0;
 
@@ -920,10 +909,10 @@ int mass_stor_warmup(mass_dev *dev) {
 
 int _delay_detect = 1;
 
-int mass_stor_getStatus()
+int mass_stor_getStatus(mass_dev* mass_device)
 {
 	int i;
-    mass_dev *dev = &mass_device;
+    mass_dev *dev = mass_device;
 
 	XPRINTF("mass_stor: getting status... \n");
 
@@ -960,26 +949,16 @@ int mass_stor_getStatus()
 	return dev->status;
 }
 
-void mass_stor_clearDisconnected()
+void mass_stor_clearDisconnected(mass_dev* mass_device)
 {
-	if(mass_device.status & DEVICE_DISCONNECTED)
-		mass_device.status &= ~DEVICE_DISCONNECTED; //  remove disconnection flag
-}
-
-unsigned mass_stor_getMaxLBA()
-{
-    return mass_device.maxLBA;
-}
-
-unsigned mass_stor_getSectorSize()
-{
-    return mass_device.sectorSize;
+	if(mass_device->status & DEVICE_DISCONNECTED)
+		mass_device->status &= ~DEVICE_DISCONNECTED; //  remove disconnection flag
 }
 
 int InitUSB()
 {
 	int ret;
-	mass_device.status = 0;
+	g_mass_device.status = 0;
 
 	driver.next 		= NULL;
 	driver.prev		    = NULL;
