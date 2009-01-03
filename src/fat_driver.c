@@ -986,7 +986,7 @@ int fat_mountCheck(int device)
 }
 
 //---------------------------------------------------------------------------
-int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
+int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir) {
 	fat_direntry_sfn* dsfn;
 	fat_direntry_lfn* dlfn;
 	fat_direntry dir;
@@ -1000,11 +1000,11 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
 	mass_dev* mass_device = mass_stor_getDevice(fatd->device);
 
 	//the getFirst function was not called
-	if (fatd->direntryCluster == 0xFFFFFFFF || fatDir == NULL) {
+	if (fatdlist->direntryCluster == 0xFFFFFFFF || fatDir == NULL) {
 		return -2;
 	}
 
-	dirCluster = fatd->direntryCluster;
+	dirCluster = fatdlist->direntryCluster;
 
 	//clear name strings
 	dir.sname[0] = 0;
@@ -1019,8 +1019,8 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
   //dlanor: but avoid rescanning same areas redundantly (if possible)
 	cont = 1;
 	new_entry = 1;
-	dirPos = (fatd->direntryIndex*32) % fatd->partBpb.sectorSize;
-	for (i = ((fatd->direntryIndex*32) / fatd->partBpb.sectorSize); (i < dirSector) && cont; i++) {
+	dirPos = (fatdlist->direntryIndex*32) % fatd->partBpb.sectorSize;
+	for (i = ((fatdlist->direntryIndex*32) / fatd->partBpb.sectorSize); (i < dirSector) && cont; i++) {
 		unsigned char* sbuf = NULL; //sector buffer
 
 		//At cluster borders, get correct sector from cluster chain buffer
@@ -1040,7 +1040,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
 			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
 			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
 			cont = fat_getDirentry(dsfn, dlfn, &dir); //get a directory entry from sector
-			fatd->direntryIndex++; //Note current entry processed
+			fatdlist->direntryIndex++; //Note current entry processed
 			if (cont == 1) { //when short file name entry detected
 				fat_setFatDir(fatd, fatDir, dsfn, &dir, 0);
 				return 1;
@@ -1050,12 +1050,12 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir) {
 		dirPos = 0;
 	}//ends "for"
 	// when we get this far - reset the direntry cluster
-	fatd->direntryCluster = 0xFFFFFFFF; //no more files
+	fatdlist->direntryCluster = 0xFFFFFFFF; //no more files
 	return -1; //indicate that no direntry is avalable
 }
 
 //---------------------------------------------------------------------------
-int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir* fatDir) {
+int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir) {
 	int ret;
 	unsigned int startCluster = 0;
 
@@ -1067,9 +1067,9 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir* fatDir) {
 	if ((fatDir->attr & FAT_ATTR_DIRECTORY) == 0) {
 		return -3; //it's a file - exit
 	}
-	fatd->direntryCluster = startCluster;
-	fatd->direntryIndex = 0;
-	return fat_getNextDirentry(fatd, fatDir);
+	fatdlist->direntryCluster = startCluster;
+	fatdlist->direntryIndex = 0;
+	return fat_getNextDirentry(fatd, fatdlist, fatDir);
 }
 
 
@@ -1081,9 +1081,6 @@ int fat_initDriver(fat_driver* fatd) {
 
 	fatd->lastChainCluster = 0xFFFFFFFF;
 	fatd->lastChainResult = -1;
-
-	fatd->direntryCluster = 0xFFFFFFFF;
-	fatd->direntryIndex = 0;
 
 	ret = DISK_INIT(fatd->device, mass_device->sectorSize); // modified by Hermes
 	if (ret < 0) {

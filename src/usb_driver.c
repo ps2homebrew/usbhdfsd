@@ -16,7 +16,7 @@
 #include <sysmem.h>
 #define malloc(a)	AllocSysMemory(0,(a), NULL)
 
-#define DEBUG  //comment out this line when not debugging
+//#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
 #include "usbhd_common.h"

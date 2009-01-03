@@ -42,19 +42,27 @@ typedef struct _fs_rec {
 	int           file_flag;
   //This flag is always 1 for a file, and always 0 for a folder (different typedef)
   //Routines that handle both must test it, and then typecast the privdata pointer
-  //to the type that is appropriate for the given case. (see also D_PRIVATE typedef)
-	int           fd;
+  //to the type that is appropriate for the given case. (see also fs_dir typedef)
 	unsigned int  filePos;
 	int           mode;	//file open mode
 	unsigned int  sfnSector; //short filename sector  - write support
 	int           sfnOffset; //short filename offset  - write support
 	int           sizeChange; //flag
+	fat_dir fatdir;
 } fs_rec;
+
+typedef struct _fs_dir {
+	int           file_flag;
+	//This flag is always 1 for a file, and always 0 for a folder (different typedef)
+	//Routines that handle both must test it, and then typecast the privdata pointer
+	//to the type that is appropriate for the given case. (see also fs_rec typedef)
+	int status;
+	fat_dir fatdir;
+	fat_dir_list fatdlist;
+} fs_dir;
 
 #define MAX_FILES 16
 fs_rec  fsRec[MAX_FILES]; //file info record
-fat_dir fsDir[MAX_FILES]; //directory entry
-static int fsCounter = 0;
 
 static iop_device_t fs_driver;
 static iop_device_ops_t fs_functarray;
@@ -141,57 +149,27 @@ int	nameSignature;
 int	removalTime;
 int     removalResult;
 
-typedef struct {
-	int           file_flag;
-  //This flag is always 1 for a file, and always 0 for a folder (different typedef)
-  //Routines that handle both must test it, and then typecast the privdata pointer
-  //to the type that is appropriate for the given case. (see also fs_rec typedef)
-   int status;
-   fat_dir fatdir;
-} D_PRIVATE;
-
-
 //---------------------------------------------------------------------------
-int fs_findFreeFileSlot(int fd) {
+fs_rec* fs_findFreeFileSlot(void) {
 	int i;
-	int result = -1;
 	for (i = 0; i < MAX_FILES; i++) {
-		if (fsRec[i].fd == fd) {
-			result = i;
+		if (fsRec[i].file_flag == -1) {
+			return &fsRec[i];
 			break;
 		}
 	}
-	return result;
+	return NULL;
 }
 
 //---------------------------------------------------------------------------
-int fs_findFileSlot(iop_file_t* file) {
+fs_rec* fs_findFileSlotByName(const char* name) {
 	int i;
-	int result = -1;
-	fs_rec* rec = (fs_rec*)file->privdata;
-	int fd = rec->fd;
-
 	for (i = 0; i < MAX_FILES; i++) {
-		if (fsRec[i].fd == fd) {
-			result = i;
-			break;
+		if (fsRec[i].file_flag >= 0 && strEqual(fsRec[i].fatdir.name, (unsigned char*) name) == 0) {
+			return &fsRec[i];
 		}
 	}
-	return result;
-}
-
-//---------------------------------------------------------------------------
-int fs_findFileSlotByName(const char* name) {
-	int i;
-	int result = -1;
-
-	for (i = 0; i < MAX_FILES; i++) {
-		if (fsRec[i].fd >= 0 && strEqual(fsDir[i].name, (unsigned char*) name) == 0) {
-			result = i;
-			break;
-		}
-	}
-	return result;
+	return NULL;
 }
 
 //---------------------------------------------------------------------------
@@ -229,7 +207,7 @@ int _fs_unlock(void)
 void fs_reset(void)
 {
 	int i;
-	for (i = 0; i < MAX_FILES; i++) { fsRec[i].fd = -1; }
+	for (i = 0; i < MAX_FILES; i++) { fsRec[i].file_flag = -1; }
 	if(_lock_sema_id >= 0) { DeleteSema(_lock_sema_id); }
 	_fs_init_lock();
 }
@@ -250,8 +228,8 @@ int fs_init(iop_device_t *driver)
 
 //---------------------------------------------------------------------------
 int fs_open(iop_file_t* fd, const char *name, int mode) {
-	int index, index2;
-	int mode2;
+	fs_rec* rec;
+	fs_rec* rec2;
 	int ret;
 	unsigned int cluster;
 	char escapeNotExist;
@@ -266,23 +244,19 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	fat_driver* fatd = fat_getData(fd->unit);
 
-	//check if the slot is free
-	index = fs_findFreeFileSlot(-1);
-	if (index  < 0) { _fs_unlock(); return -EMFILE; }
-	fsRec[index].file_flag = 1;
-
 	//check if the file is already open
-	index2 = fs_findFileSlotByName(name);
-
-	//file already open
-	if (index2 >= 0) {
-		mode2 = fsRec[index2].mode;
-		if (	(mode & O_WRONLY) || //current file is opened for write
-			(mode2 & O_WRONLY) ) {//other file is opened for write
+	rec2 = fs_findFileSlotByName(name);
+	if (rec2 != NULL) {
+		if ((mode & O_WRONLY) || //current file is opened for write
+			(rec2->mode & O_WRONLY) ) {//other file is opened for write
 			_fs_unlock();
 			return 	-EACCES;
 		}
 	}
+
+	//check if the slot is free
+	rec = fs_findFreeFileSlot();
+	if (index  < 0) { _fs_unlock(); return -EMFILE; }
 
 	if((mode & O_WRONLY))  { //dlanor: corrected bad test condition
 		cluster = 0; //start from root
@@ -293,9 +267,9 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 			escapeNotExist = 0;
 		}
 
-		fsRec[index].sfnSector = 0;
-		fsRec[index].sfnOffset = 0;
-		ret = fat_createFile(fatd, name, 0, escapeNotExist, &cluster, &fsRec[index].sfnSector, &fsRec[index].sfnOffset);
+		rec->sfnSector = 0;
+		rec->sfnOffset = 0;
+		ret = fat_createFile(fatd, name, 0, escapeNotExist, &cluster, &rec->sfnSector, &rec->sfnOffset);
 		if (ret < 0) {
 		    _fs_unlock(); 
 			return ret;
@@ -303,15 +277,15 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 		//the file already exist but mode is set to truncate
 		if (ret == 2 && (mode & O_TRUNC)) {
 			XPRINTF("FAT I: O_TRUNC detected!\n");
-			fat_truncateFile(fatd, cluster, fsRec[index].sfnSector, fsRec[index].sfnOffset);
+			fat_truncateFile(fatd, cluster, rec->sfnSector, rec->sfnOffset);
 		}
 	}
 
 	//find the file
 	cluster = 0; //allways start from root
 	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
-	ret = fat_getFileStartCluster(fatd, name, &cluster, &fsDir[index]);
-	if ((fsDir[index].attr & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY) {
+	ret = fat_getFileStartCluster(fatd, name, &cluster, &rec->fatdir);
+	if ((rec->fatdir.attr & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY) {
 		// Can't open a directory with fioOpen
 		_fs_unlock();
 		return -EISDIR;
@@ -321,28 +295,26 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 		return ret;
 	}
 
-	//store fd to file slot
-	fsCounter++;
-	fsRec[index].fd = fsCounter; //fd
-	fsRec[index].mode = mode;
-	fsRec[index].filePos = 0;
-	fsRec[index].sizeChange  = 0;
+	rec->file_flag = 1;
+	rec->mode = mode;
+	rec->filePos = 0;
+	rec->sizeChange  = 0;
 
 	if ((mode & O_APPEND) && (mode & O_WRONLY)) {
 		XPRINTF("FAT I: O_APPEND detected!\n");
-		fsRec[index].filePos = fsDir[index].size;
+		rec->filePos = rec->fatdir.size;
 	}
 
 	//store the slot to user parameters
-	fd->privdata = &fsRec[index];
+	fd->privdata = rec;
 
-    _fs_unlock();
-	return fsCounter;
+	_fs_unlock();
+	return 1;
 }
 
 //---------------------------------------------------------------------------
 int fs_close(iop_file_t* fd) {
-	int index;
+	fs_rec* rec = (fs_rec*)fd->privdata;
     int ret;
 
     _fs_lock();
@@ -353,17 +325,12 @@ int fs_close(iop_file_t* fd) {
 
 	fat_driver* fatd = fat_getData(fd->unit);
 
-	index = fs_findFileSlot(fd);
-	if (index < 0) {
-		_fs_unlock();
-		return -EFAULT;
-	}
-	fsRec[index].fd = -1;
+	rec->file_flag = -1;
 
-	if ((fsRec[index].mode & O_WRONLY)) {
+	if ((rec->mode & O_WRONLY)) {
 		//update direntry size and time
-		if (fsRec[index].sizeChange) {
-			fat_updateSfn(fatd, fsDir[index].size, fsRec[index].sfnSector, fsRec[index].sfnOffset);
+		if (rec->sizeChange) {
+			fat_updateSfn(fatd, rec->fatdir.size, rec->sfnSector, rec->sfnOffset);
 		}
 
 		FLUSH_SECTORS(fatd->device);
@@ -375,7 +342,7 @@ int fs_close(iop_file_t* fd) {
 
 //---------------------------------------------------------------------------
 int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
-	int index;
+	fs_rec* rec = (fs_rec*)fd->privdata;
     int ret;
 
     _fs_lock();
@@ -384,40 +351,35 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
     ret = fat_mountCheck(fd->unit);
     if (ret < 0) { _fs_unlock(); return ret; }
 
-	index = fs_findFileSlot(fd);
-	if (index < 0) {
-        _fs_unlock();
-		return -EFAULT;
-	}
 	switch(whence) {
 		case SEEK_SET:
-			fsRec[index].filePos = offset;
+			rec->filePos = offset;
 			break;
 		case SEEK_CUR:
-			fsRec[index].filePos += offset;
+			rec->filePos += offset;
 			break;
 		case SEEK_END:
-			fsRec[index].filePos = fsDir[index].size + offset;
+			rec->filePos = rec->fatdir.size + offset;
 			break;
 		default:
 		    _fs_unlock();
 			return -1;
 	}
-	if (fsRec[index].filePos < 0) {
-		fsRec[index].filePos = 0;
+	if (rec->filePos < 0) {
+		rec->filePos = 0;
 	}
-	if (fsRec[index].filePos > fsDir[index].size) {
-		fsRec[index].filePos = fsDir[index].size;
+	if (rec->filePos > rec->fatdir.size) {
+		rec->filePos = rec->fatdir.size;
 	}
 
 	_fs_unlock();
-	return fsRec[index].filePos;
+	return rec->filePos;
 }
 
 //---------------------------------------------------------------------------
 int fs_write(iop_file_t* fd, void * buffer, int size )
 {
-	int index;
+	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
 	int updateClusterIndices;
     int ret;
@@ -432,19 +394,17 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 
 	updateClusterIndices = 0;
 
-	index = fs_findFileSlot(fd);
-	if (index < 0) { _fs_unlock(); return -1; }
 	if (size <= 0) { _fs_unlock(); return 0; }
 
-	result = fat_writeFile(fatd, &fsDir[index], &updateClusterIndices, fsRec[index].filePos, (unsigned char*) buffer, size);
+	result = fat_writeFile(fatd, &rec->fatdir, &updateClusterIndices, rec->filePos, (unsigned char*) buffer, size);
 	if (result > 0) { //write succesful
-		fsRec[index].filePos += result;
-		if (fsRec[index].filePos > fsDir[index].size) {
-			fsDir[index].size = fsRec[index].filePos;
-			fsRec[index].sizeChange = 1;
+		rec->filePos += result;
+		if (rec->filePos > rec->fatdir.size) {
+			rec->fatdir.size = rec->filePos;
+			rec->sizeChange = 1;
 			//if new clusters allocated - then update file cluster indices
 			if (updateClusterIndices) {
-				fat_setFatDirChain(fatd, &fsDir[index]);
+				fat_setFatDirChain(fatd, &rec->fatdir);
 			}
 		}
 	}
@@ -455,7 +415,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 
 //---------------------------------------------------------------------------
 int fs_read(iop_file_t* fd, void * buffer, int size ) {
-	int index;
+	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
     int ret;
 
@@ -467,24 +427,18 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 
 	fat_driver* fatd = fat_getData(fd->unit);
 
-	index = fs_findFileSlot(fd);
-	if (index < 0) {
-	    _fs_unlock();
-		return -1;
-	}
-
 	if (size<=0) {
 	    _fs_unlock();
 		return 0;
 	}
 
-	if ((fsRec[index].filePos+size) > fsDir[index].size) {
-		size = fsDir[index].size - fsRec[index].filePos;
+	if ((rec->filePos+size) > rec->fatdir.size) {
+		size = rec->fatdir.size - rec->filePos;
 	}
 
-	result = fat_readFile(fatd, &fsDir[index], fsRec[index].filePos, (unsigned char*) buffer, size);
+	result = fat_readFile(fatd, &rec->fatdir, rec->filePos, (unsigned char*) buffer, size);
 	if (result > 0) { //read succesful
-		fsRec[index].filePos += result;
+		rec->filePos += result;
 	}
 
 	_fs_unlock();
@@ -515,7 +469,7 @@ int getMillis()
 
 //---------------------------------------------------------------------------
 int fs_remove (iop_file_t *fd, const char *name) {
-	int index;
+	fs_rec* rec;
 	int result;
     int ret;
 
@@ -533,13 +487,13 @@ int fs_remove (iop_file_t *fd, const char *name) {
 
 	fat_driver* fatd = fat_getData(fd->unit);
 
-	index = fs_findFileSlotByName(name);
+	rec = fs_findFileSlotByName(name);
 	//store filename signature and time of removal
 	nameSignature = getNameSignature(name);
 	removalTime = getMillis();
 
 	//file is opened - can't delete the file
-	if (index >= 0) {
+	if (rec != NULL) {
 		result = -EINVAL;
 		removalResult = result;
         _fs_unlock();
@@ -617,9 +571,8 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 //---------------------------------------------------------------------------
 int fs_dopen  (iop_file_t *fd, const char *name)
 {
-	//int index;
-	fat_dir fatdir;
 	int ret, is_root = 0;
+	fs_dir* rec;
 
 	_fs_lock();
     
@@ -631,8 +584,6 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 
 	fat_driver* fatd = fat_getData(fd->unit);
 
-	fsCounter++;
-
 	if( ((name[0] == '/') && (name[1] == '\0'))
 		||((name[0] == '/') && (name[1] == '.') && (name[2] == '\0')))
 	{
@@ -640,10 +591,11 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 		is_root = 1;
 	}
 
-	ret = fat_getFirstDirentry(fatd, (char*)name, &fatdir);
+	fd->privdata = (void*)malloc(sizeof(fs_dir));
+	memset(fd->privdata, 0, sizeof(fs_dir)); //NB: also implies "file_flag = 0;"
+	rec = (fs_dir *) fd->privdata;
 
-	fd->privdata = (void*)malloc(sizeof(D_PRIVATE));
-	memset(fd->privdata, 0, sizeof(D_PRIVATE)); //NB: also implies "file_flag = 0;"
+	ret = fat_getFirstDirentry(fatd, (char*)name, &rec->fatdlist, &rec->fatdir);
 
 	if (ret < 1)
 	{
@@ -651,13 +603,11 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 		if(!is_root) { free(fd->privdata); _fs_unlock(); return(-1); }
 
 		// cause "dread" to return "no entries" immediately since dir is empty.
-		((D_PRIVATE *) fd->privdata)->status = 1;
+		rec->status = 1;
 	}
 
-	memcpy(&(((D_PRIVATE*)fd->privdata)->fatdir), &fatdir, sizeof(fatdir));
-
 	_fs_unlock();
-	return fsCounter;
+	return 1;
 }
 
 //---------------------------------------------------------------------------
@@ -675,6 +625,8 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 {
 	int notgood;
 	int ret;
+	fs_dir* rec = (fs_dir *) fd->privdata;
+
 
 	_fs_lock();
     
@@ -687,7 +639,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 	fat_driver* fatd = fat_getData(fd->unit);
 
 	do {
-		if (((D_PRIVATE*)fd->privdata)->status)
+		if (rec->status)
 		{
 			_fs_unlock();
 			return 0;
@@ -696,14 +648,14 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 		notgood = 0;
 
 		memset(buffer, 0, sizeof(fio_dirent_t));
-		if ((((D_PRIVATE*)fd->privdata)->fatdir).attr & FAT_ATTR_VOLUME_LABEL) {	 /* volume name */
+		if (rec->fatdir.attr & FAT_ATTR_VOLUME_LABEL) {	 /* volume name */
 			notgood = 1;
 		}
-		fillStat(&buffer->stat, &((D_PRIVATE*)fd->privdata)->fatdir);
-		strcpy(buffer->name, (const char*)(((D_PRIVATE*)fd->privdata)->fatdir).name);
+		fillStat(&buffer->stat, &rec->fatdir);
+		strcpy(buffer->name, (const char*) rec->fatdir.name);
 
-		if (fat_getNextDirentry(fatd, &(((D_PRIVATE*)fd->privdata)->fatdir))<1)
-			((D_PRIVATE*)fd->privdata)->status = 1;	/* no more entries */
+		if (fat_getNextDirentry(fatd, &rec->fatdlist, &rec->fatdir)<1)
+			rec->status = 1;	/* no more entries */
 	} while (notgood);
 
 	_fs_unlock();

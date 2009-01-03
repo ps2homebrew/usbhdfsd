@@ -15,9 +15,6 @@ typedef struct _fat_driver {
 
 	int workPartition;
 
-	unsigned int  direntryCluster; //the directory cluster requested by getFirstDirentry
-	int direntryIndex; //index of the directory children
-
 	unsigned int  lastChainCluster;
 	int lastChainResult;
 
@@ -41,12 +38,17 @@ typedef struct _fat_driver {
 	unsigned int clStackLast; // last free cluster of the fat table
 } fat_driver;
 
+typedef struct _fat_dir_list {
+	unsigned int  direntryCluster; //the directory cluster requested by getFirstDirentry
+	int direntryIndex; //index of the directory children
+} fat_dir_list;
+
 int fat_mountCheck(int device);
 void fat_forceUnmount(fat_driver* fatd); //dlanor: added for disconnection events (flush impossible)
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
 int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size);
-int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir* fatDir);
-int fat_getNextDirentry(fat_driver* fatd, fat_dir* fatDir);
+int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir);
+int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir);
 
 int getI32(unsigned char* buf);
 int getI32_2(unsigned char* buf1, unsigned char* buf2);
