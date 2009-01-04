@@ -24,7 +24,6 @@
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
 
-#include "scache.h"
 #include "fat_driver.h"
 #include "fat_write.h"
 #include "usbhd_common.h"
@@ -36,7 +35,7 @@
 #define IOCTL_CKFREE 0xBABEC0DE  //dlanor: Ioctl request code => Check free space
 #define IOCTL_RENAME 0xFEEDC0DE  //dlanor: Ioctl request code => Rename
 
-#define FLUSH_SECTORS		scache_flushSectors
+#define FLUSH_SECTORS		fat_flushSectors
 
 typedef struct _fs_rec {
 	int           file_flag;
@@ -333,7 +332,7 @@ int fs_close(iop_file_t* fd) {
 			fat_updateSfn(fatd, rec->fatdir.size, rec->sfnSector, rec->sfnOffset);
 		}
 
-		FLUSH_SECTORS(fatd->device);
+		FLUSH_SECTORS(fatd);
 	}
 
     _fs_unlock();
@@ -471,15 +470,13 @@ int getMillis()
 int fs_remove (iop_file_t *fd, const char *name) {
 	fs_rec* rec;
 	int result;
-    int ret;
 
     _fs_lock();
 
     //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0)
+    result = fat_mountCheck(fd->unit);
+    if (result < 0)
     {
-		result = -1;
 		removalResult = result;
         _fs_unlock();
  		return result;
@@ -501,7 +498,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
 	}
 
 	result = fat_deleteFile(fatd, name, 0);
-	FLUSH_SECTORS(fatd->device);
+	FLUSH_SECTORS(fatd);
 	removalTime = getMillis(); //update removal time
 	removalResult = result;
 
@@ -540,7 +537,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 	if (ret == 2) {
 		ret = -EEXIST;
 	}
-	FLUSH_SECTORS(fatd->device);
+	FLUSH_SECTORS(fatd);
 
     _fs_unlock();
 	return ret;
@@ -563,7 +560,7 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 	fat_driver* fatd = fat_getData(fd->unit);
 
 	ret = fat_deleteFile(fatd, name, 1);
-	FLUSH_SECTORS(fatd->device);
+	FLUSH_SECTORS(fatd);
     _fs_unlock();
 	return ret;
 }

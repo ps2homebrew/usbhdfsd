@@ -36,7 +36,7 @@
 #define CACHE_SIZE 32
 
 //when the flushCounter reaches FLUSH_TRIGGER then flushSectors is called
-#define FLUSH_TRIGGER 16
+//#define FLUSH_TRIGGER 16
 
 typedef struct _cache_record
 {
@@ -56,7 +56,7 @@ typedef struct _cache_set
     unsigned int cacheAccess;
     unsigned int cacheHits;
     unsigned int writeFlag;
-    unsigned int flushCounter;
+    //unsigned int flushCounter;
 
     //unsigned int cacheDumpCounter = 0;
 } cache_set;
@@ -86,7 +86,7 @@ void initRecords(cache_set* cache)
 	}
 
 	cache->writeFlag = 0;
-	cache->flushCounter = 0;
+	//cache->flushCounter = 0;
 }
 
 //---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ int scache_flushSectors(int device) {
         return 0;
     }
 
-	cache->flushCounter = 0;
+	//cache->flushCounter = 0;
 
 	XPRINTF("scache: flushSectors writeFlag=%d\n", cache->writeFlag);
 	//no write operation occured since last flush
@@ -229,16 +229,17 @@ int scache_readSector(int device, unsigned int sector, void** buf) {
 	ret = READ_SECTOR_4096(mass_stor_getDevice(device), alignedSector, cache->sectorBuf + (index * cache->sectorSize));
 
 	if (ret < 0) {
+		printf("scache: ERROR reading sector from disk! sector=%d\n", alignedSector);
 		return ret;
 	}
 	*buf = cache->sectorBuf + (index * cache->sectorSize) + ((sector%cache->indexLimit) * cache->sectorSize);
 	XPRINTF("cache: done reading physical sector \n");
 
 	//write precaution
-	cache->flushCounter++;
-	if (cache->flushCounter == FLUSH_TRIGGER) {
-		scache_flushSectors(device);
-	}
+	//cache->flushCounter++;
+	//if (cache->flushCounter == FLUSH_TRIGGER) {
+		//scache_flushSectors(device);
+	//}
 
 	return cache->sectorSize;
 }
@@ -283,13 +284,13 @@ int scache_writeSector(int device, unsigned int sector) {
 
 	XPRINTF("cache: writeSector device = %i sector = %i \n", device, sector);
 	if (cache == NULL) {
-		XPRINTF("cache: device cache not created = %i \n", device);
+		printf("cache: device cache not created = %i \n", device);
 		return -1;
 	}
 
 	index = getSlot(cache, sector);
 	if (index <  0) { //sector not found in cache
-		XPRINTF("cache: writeSector: ERROR! the sector is not allocated! \n");
+		printf("cache: writeSector: ERROR! the sector is not allocated! \n");
 		return -1;
 	}
 	XPRINTF("cache: slotFound=%i \n", index);
@@ -305,10 +306,10 @@ int scache_writeSector(int device, unsigned int sector) {
 
 
 	//write precaution
-	cache->flushCounter++;
-	if (cache->flushCounter == FLUSH_TRIGGER) {
-		scache_flushSectors(device);
-	}
+	//cache->flushCounter++;
+	//if (cache->flushCounter == FLUSH_TRIGGER) {
+		//scache_flushSectors(device);
+	//}
 
 	return cache->sectorSize;
 }

@@ -1666,6 +1666,7 @@ int fat_clearDirSpace(fat_driver* fatd, unsigned char* lname, char directory, un
 	unsigned int theSector;
 	unsigned int sfnSector;
 	int sfnOffset;
+	unsigned char* sbuf = NULL; //sector buffer ????
 
 	sname[0] = 0;
 
@@ -1707,8 +1708,6 @@ int fat_clearDirSpace(fat_driver* fatd, unsigned char* lname, char directory, un
 	//now mark direntries as deleted
 	theSector = 0;
 	for (i = 0; i < fatd->deIdx; i++) {
-		unsigned char* sbuf = NULL; //sector buffer ????
-
 		if (fatd->deSec[i] != theSector) {
 			if (theSector > 0) {
 				ret = WRITE_SECTOR(fatd->device, theSector);
@@ -1740,7 +1739,6 @@ int fat_clearDirSpace(fat_driver* fatd, unsigned char* lname, char directory, un
 		XPRINTF("E: delete cluster chain failed!\n");
 		return ret;
 	}
-	FLUSH_SECTORS(fatd->device);
 	return 1;
 }
 
@@ -1966,7 +1964,7 @@ int fat_deleteFile(fat_driver* fatd, const char* fname, char directory) {
 	if (startCluster != directoryCluster) {
 		XPRINTF("I: file/dir removed from cluster=%d\n", startCluster);
 	}
-	return 1;
+	return 0;
 }
 
 

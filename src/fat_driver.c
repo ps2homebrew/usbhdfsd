@@ -25,7 +25,7 @@
 #define DISK_CLOSE     scache_close
 #define DISK_KILL      scache_kill  //dlanor: added for disconnection events (no flush)
 #define READ_SECTOR(d, a, b)	scache_readSector((d), (a), (void **)&b)
-#define FLUSH_SECTORS		scache_flushSectors
+//#define FLUSH_SECTORS		scache_flushSectors
 
 static fat_driver* g_fatd[NUM_DEVICES];
 
