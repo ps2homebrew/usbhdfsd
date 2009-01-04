@@ -26,7 +26,6 @@ int mass_stor_probe(int devId);
 int mass_stor_readSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer);
 int mass_stor_writeSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer);
 int mass_stor_getStatus(mass_dev* mass_device);
-void mass_stor_clearDisconnected(mass_dev* mass_device);
-mass_dev* mass_stor_getDevice(int device);
+mass_dev* mass_stor_getDevice(int devId);
 
 #endif

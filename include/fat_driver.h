@@ -4,7 +4,7 @@
 #include "fat.h"
 
 typedef struct _fat_driver {
-	int device;
+	int devId;
 	int	mounted;	//disk mounted=1 not mounted=0
 	fat_part partTable;	//partition master record
 	fat_bpb  partBpb;	//partition bios parameter block
@@ -57,8 +57,6 @@ int strEqual(unsigned char *s1, unsigned char* s2);
 unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
 unsigned int fat_cluster2sector(fat_driver* fatd, unsigned int cluster);
 
-int      fat_initDriver(fat_driver* fatd);
-void     fat_closeDriver(fat_driver* fatd);
 fat_driver * fat_getData(int device);
 int      fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir);
 int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
