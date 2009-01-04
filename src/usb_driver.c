@@ -23,6 +23,9 @@
 
 #define getBI32(__buf) ((((u8 *) (__buf))[3] << 0) | (((u8 *) (__buf))[2] << 8) | (((u8 *) (__buf))[1] << 16) | (((u8 *) (__buf))[0] << 24))
 
+int fat_connect(int devId);
+int fat_disconnect(int devId);
+
 /*
 typedef struct _read_info {
 	mass_dev* dev;
@@ -533,11 +536,6 @@ int usb_bulk_transfer(int pipe, void* buffer, int transferSize) {
 	return returnCode;
 }
 
-mass_dev* mass_stor_getDevice(int device)
-{
-    return g_mass_device[device];
-}
-
 mass_dev* mass_stor_findDevice(int devId, int create)
 {
     int i;
@@ -551,6 +549,7 @@ mass_dev* mass_stor_findDevice(int devId, int create)
                 g_mass_device[i] = malloc(sizeof(mass_dev));
                 g_mass_device[i]->devId = devId;
                 g_mass_device[i]->status = 0;
+                g_mass_device[i]->sectorSize = 0;
                 return g_mass_device[i];
             }
             else
@@ -563,6 +562,11 @@ mass_dev* mass_stor_findDevice(int devId, int create)
         }
     }
     return NULL;
+}
+
+mass_dev* mass_stor_getDevice(int devId)
+{
+    return mass_stor_findDevice(devId, 0);
 }
 
 /* reads esctor group - up to 4096 bytes */
@@ -755,6 +759,7 @@ int mass_stor_connect(int devId)
 	dev->status |= DEVICE_DETECTED;
 	XPRINTF("usb_mass: connect ok: epI=%i, epO=%i \n", dev->bulkEpI, dev->bulkEpO);
 
+	fat_connect(devId);
 	return 0;
 }
 
@@ -773,7 +778,7 @@ void mass_stor_release(mass_dev *dev)
 	dev->bulkEpI = -1;
 	dev->bulkEpO = -1;
 	dev->controlEp = -1;
-	dev->status = DEVICE_DISCONNECTED;
+	dev->status = 0;
 }
 
 int mass_stor_disconnect(int devId) {
@@ -791,6 +796,7 @@ int mass_stor_disconnect(int devId) {
 	if ((dev->status & DEVICE_DETECTED) && devId == dev->devId)
 	{
 		mass_stor_release(dev);
+		fat_disconnect(devId);
 	}
 	return 0;
 }
@@ -994,12 +1000,6 @@ int mass_stor_getStatus(mass_dev* mass_device)
 	}
 
 	return dev->status;
-}
-
-void mass_stor_clearDisconnected(mass_dev* mass_device)
-{
-	if(mass_device->status & DEVICE_DISCONNECTED)
-		mass_device->status &= ~DEVICE_DISCONNECTED; //  remove disconnection flag
 }
 
 int InitUSB()

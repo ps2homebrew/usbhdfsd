@@ -47,6 +47,7 @@ typedef struct _cache_record
 
 typedef struct _cache_set
 {
+    int devId;
     int sectorSize;
     int indexLimit;
     unsigned char* sectorBuf; // = NULL;		//sector content - the cache buffer
@@ -90,6 +91,32 @@ void initRecords(cache_set* cache)
 }
 
 //---------------------------------------------------------------------------
+cache_set* findCache(int devId, int create)
+{
+    int i;
+    for (i = 0; i < NUM_DEVICES; ++i)
+    {
+        if (g_cache[i] == NULL)
+        {
+            if (create)
+            {
+                g_cache[i] = malloc(sizeof(cache_set));
+                g_cache[i]->devId = devId;
+                g_cache[i]->sectorBuf = NULL;
+                return g_cache[i];
+            }
+            else
+                return NULL;
+        }
+        else if (g_cache[i]->devId == devId)
+        {
+            return g_cache[i];
+        }
+    }
+    return NULL;
+}
+
+//---------------------------------------------------------------------------
 /* search cache records for the sector number stored in cache
   returns cache record (slot) number
  */
@@ -127,7 +154,7 @@ int getIndexRead(cache_set* cache, unsigned int sector) {
 
 //---------------------------------------------------------------------------
 /* select the best record where to store new sector */
-int getIndexWrite(int device, cache_set* cache, unsigned int sector) {
+int getIndexWrite(int devId, cache_set* cache, unsigned int sector) {
 	int i, ret;
 	int minTax = 0x0FFFFFFF;
 	int index = 0;
@@ -142,7 +169,7 @@ int getIndexWrite(int device, cache_set* cache, unsigned int sector) {
 	//this sector is dirty - we need to flush it first
 	if (cache->rec[index].writeDirty) {
 		XPRINTF("scache: getIndexWrite: sector is dirty : %d   index=%d \n", cache->rec[index].sector, index);
-		ret = WRITE_SECTOR_4096(mass_stor_getDevice(device), cache->rec[index].sector, cache->sectorBuf + (index * 4096));
+		ret = WRITE_SECTOR_4096(mass_stor_getDevice(devId), cache->rec[index].sector, cache->sectorBuf + (index * 4096));
 		cache->rec[index].writeDirty = 0;
 		//TODO - error handling
 		if (ret < 0) {
@@ -162,12 +189,12 @@ int getIndexWrite(int device, cache_set* cache, unsigned int sector) {
 /*
 	flush dirty sectors
  */
-int scache_flushSectors(int device) {
-    cache_set* cache = g_cache[device];
+int scache_flushSectors(int devId) {
+    cache_set* cache = findCache(devId, 0);
 	int i,ret;
 	int counter = 0;
 
-	XPRINTF("cache: flushSectors device = %i \n", device);
+	XPRINTF("cache: flushSectors devId = %i \n", devId);
 
     if (cache == NULL) {
         return 0;
@@ -184,7 +211,7 @@ int scache_flushSectors(int device) {
 	for (i = 0; i < CACHE_SIZE; i++) {
 		if (cache->rec[i].writeDirty) {
 			XPRINTF("scache: flushSectors dirty index=%d sector=%d \n", i, cache->rec[i].sector);
-			ret = WRITE_SECTOR_4096(mass_stor_getDevice(device), cache->rec[i].sector, cache->sectorBuf + (i * 4096));
+			ret = WRITE_SECTOR_4096(mass_stor_getDevice(devId), cache->rec[i].sector, cache->sectorBuf + (i * 4096));
 			cache->rec[i].writeDirty = 0;
 			//TODO - error handling
 			if (ret < 0) {
@@ -199,15 +226,15 @@ int scache_flushSectors(int device) {
 }
 
 //---------------------------------------------------------------------------
-int scache_readSector(int device, unsigned int sector, void** buf) {
-    cache_set* cache = g_cache[device];
+int scache_readSector(int devId, unsigned int sector, void** buf) {
+    cache_set* cache = findCache(devId, 0);
 	int index; //index is given in single sectors not octal sectors
 	int ret;
 	unsigned int alignedSector;
 
-	XPRINTF("cache: readSector device = %i sector = %i \n", device, sector);
+	XPRINTF("cache: readSector devId = %i %X sector = %i \n", devId, (int) cache, sector);
     if (cache == NULL) {
-        XPRINTF("cache: device cache not created = %i \n", device);
+        XPRINTF("cache: devId cache not created = %i \n", devId);
         return -1;
     }
     
@@ -224,9 +251,9 @@ int scache_readSector(int device, unsigned int sector, void** buf) {
 
 	//compute alignedSector - to prevent storage of duplicit sectors in slots
 	alignedSector = (sector/cache->indexLimit)*cache->indexLimit;
-	index = getIndexWrite(device, cache, alignedSector);
+	index = getIndexWrite(devId, cache, alignedSector);
 	XPRINTF("cache: indexWrite=%i slot=%d  alignedSector=%i\n", index, index / cache->indexLimit, alignedSector);
-	ret = READ_SECTOR_4096(mass_stor_getDevice(device), alignedSector, cache->sectorBuf + (index * cache->sectorSize));
+	ret = READ_SECTOR_4096(mass_stor_getDevice(devId), alignedSector, cache->sectorBuf + (index * cache->sectorSize));
 
 	if (ret < 0) {
 		printf("scache: ERROR reading sector from disk! sector=%d\n", alignedSector);
@@ -238,7 +265,7 @@ int scache_readSector(int device, unsigned int sector, void** buf) {
 	//write precaution
 	//cache->flushCounter++;
 	//if (cache->flushCounter == FLUSH_TRIGGER) {
-		//scache_flushSectors(device);
+		//scache_flushSectors(devId);
 	//}
 
 	return cache->sectorSize;
@@ -246,15 +273,15 @@ int scache_readSector(int device, unsigned int sector, void** buf) {
 
 
 //---------------------------------------------------------------------------
-int scache_allocSector(int device, unsigned int sector, void** buf) {
-    cache_set* cache = g_cache[device];
+int scache_allocSector(int devId, unsigned int sector, void** buf) {
+    cache_set* cache = findCache(devId, 0);
 	int index; //index is given in single sectors not octal sectors
 	//int ret;
 	unsigned int alignedSector;
 
-	XPRINTF("cache: allocSector device = %i sector = %i \n", device, sector);
+	XPRINTF("cache: allocSector devId = %i sector = %i \n", devId, sector);
 	if (cache == NULL) {
-		XPRINTF("cache: device cache not created = %i \n", device);
+		XPRINTF("cache: devId cache not created = %i \n", devId);
 		return -1;
 	}
     
@@ -268,7 +295,7 @@ int scache_allocSector(int device, unsigned int sector, void** buf) {
 
 	//compute alignedSector - to prevent storage of duplicit sectors in slots
 	alignedSector = (sector/cache->indexLimit)*cache->indexLimit;
-	index = getIndexWrite(device, cache, alignedSector);
+	index = getIndexWrite(devId, cache, alignedSector);
 	XPRINTF("cache: indexWrite=%i \n", index);
 	*buf = cache->sectorBuf + (index * cache->sectorSize) + ((sector%cache->indexLimit) * cache->sectorSize);
 	XPRINTF("cache: done allocating sector\n");
@@ -277,14 +304,14 @@ int scache_allocSector(int device, unsigned int sector, void** buf) {
 
 
 //---------------------------------------------------------------------------
-int scache_writeSector(int device, unsigned int sector) {
-    cache_set* cache = g_cache[device];
+int scache_writeSector(int devId, unsigned int sector) {
+    cache_set* cache = findCache(devId, 0);
 	int index; //index is given in single sectors not octal sectors
 	//int ret;
 
-	XPRINTF("cache: writeSector device = %i sector = %i \n", device, sector);
+	XPRINTF("cache: writeSector devId = %i sector = %i \n", devId, sector);
 	if (cache == NULL) {
-		printf("cache: device cache not created = %i \n", device);
+		printf("cache: devId cache not created = %i \n", devId);
 		return -1;
 	}
 
@@ -308,27 +335,18 @@ int scache_writeSector(int device, unsigned int sector) {
 	//write precaution
 	//cache->flushCounter++;
 	//if (cache->flushCounter == FLUSH_TRIGGER) {
-		//scache_flushSectors(device);
+		//scache_flushSectors(devId);
 	//}
 
 	return cache->sectorSize;
 }
 
 //---------------------------------------------------------------------------
-int scache_init(int device, int sectSize)
+int scache_init(int devId, int sectSize)
 {
-	XPRINTF("cache: init device = %i sectSize = %i \n", device, sectSize);
+	XPRINTF("cache: init devId = %i sectSize = %i \n", devId, sectSize);
 
-    if (g_cache[device] == NULL)
-    {
-        g_cache[device] = malloc(sizeof(cache_set));
-        g_cache[device]->sectorBuf = NULL;
-    }
-    cache_set* cache = g_cache[device];
-        
-	//added by Hermes
-	cache->sectorSize = sectSize;
-	cache->indexLimit = 4096/cache->sectorSize; //number of sectors per 1 cache slot
+	cache_set* cache = findCache(devId, 1);
 
 	if (cache->sectorBuf == NULL) {
 		XPRINTF("scache init! \n");
@@ -338,21 +356,28 @@ int scache_init(int device, int sectSize)
 			XPRINTF("Sector cache: can't alloate memory of size:%d \n", 4096 * CACHE_SIZE);
 			return -1;
 		}
-		XPRINTF("Sector cache: alocated memory at:%p of size:%d \n", cache->sectorBuf, 4096 * CACHE_SIZE);
-	} else {
-		XPRINTF("scache flush! \n");
+		XPRINTF("Sector cache: allocated memory at:%p of size:%d \n", cache->sectorBuf, 4096 * CACHE_SIZE);
+
+		//added by Hermes
+		cache->sectorSize = sectSize;
+		cache->indexLimit = 4096/cache->sectorSize; //number of sectors per 1 cache slot
+		cache->cacheAccess = 0;
+		cache->cacheHits = 0;
+		initRecords(cache);
 	}
-	cache->cacheAccess = 0;
-	cache->cacheHits = 0;
-	initRecords(cache);
+    else
+    {
+        if (cache->sectorSize != sectSize)
+            printf("Sector cache: sectorSize does not match\n");
+    }
 	return(1);
 }
 
 //---------------------------------------------------------------------------
-void scache_getStat(int device, unsigned int* access, unsigned int* hits) {
-    cache_set* cache = g_cache[device];
+void scache_getStat(int devId, unsigned int* access, unsigned int* hits) {
+    cache_set* cache = g_cache[devId];
 	if (cache == NULL) {
-		XPRINTF("cache: device cache not created = %i \n", device);
+		XPRINTF("cache: devId cache not created = %i \n", devId);
 		return;
 	}
 	*access = cache->cacheAccess;
@@ -360,13 +385,13 @@ void scache_getStat(int device, unsigned int* access, unsigned int* hits) {
 }
 
 //---------------------------------------------------------------------------
-void scache_kill(int device) //dlanor: added for disconnection events (flush impossible)
+void scache_kill(int devId) //dlanor: added for disconnection events (flush impossible)
 {
-	XPRINTF("cache: kill device = %i \n", device);
+	XPRINTF("cache: kill devId = %i \n", devId);
     
-	cache_set* cache = g_cache[device];
+	cache_set* cache = findCache(devId, 0);
 	if (cache == NULL) {
-		XPRINTF("cache: device cache not created = %i \n", device);
+		XPRINTF("cache: devId cache not created = %i \n", devId);
 		return;
 	}
 	if(cache->sectorBuf != NULL)
@@ -376,11 +401,11 @@ void scache_kill(int device) //dlanor: added for disconnection events (flush imp
 	}
 }
 //---------------------------------------------------------------------------
-void scache_close(int device)
+void scache_close(int devId)
 {
-	XPRINTF("cache: close device = %i \n", device);
-	scache_flushSectors(device);
-	scache_kill(device);
+	XPRINTF("cache: close devId = %i \n", devId);
+	scache_flushSectors(devId);
+	scache_kill(devId);
 }
 //---------------------------------------------------------------------------
 //End of file:  scache.c
