@@ -43,7 +43,7 @@ typedef struct _fat_dir_list {
 	int direntryIndex; //index of the directory children
 } fat_dir_list;
 
-int fat_mountCheck(int device);
+void fat_mountCheck(void);
 void fat_forceUnmount(fat_driver* fatd); //dlanor: added for disconnection events (flush impossible)
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
 int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size);

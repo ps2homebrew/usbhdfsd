@@ -91,8 +91,11 @@ fat_driver* fat_findData(int devId, int create)
 				else
 				{
 					g_fatd[i] = malloc(sizeof(fat_driver));
-					g_fatd[i]->devId = -1;
-					g_fatd[i]->mounted = 0;
+					if (g_fatd[i] != NULL)
+					{
+						g_fatd[i]->devId = -1;
+						g_fatd[i]->mounted = 0;
+					}
 					return g_fatd[i];
 				}
 			}
@@ -769,7 +772,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 		ret = READ_SECTOR(fatd->devId, startSector + i, sbuf);
 		if (ret < 0) {
 			printf("FAT driver: read directory sector failed ! sector=%i\n", startSector + i);
-			return FAT_ERROR;
+			return -1;
 		}
 		XPRINTF("read sector ok, scanning sector for direntries...\n");
 		dirPos = 0;
@@ -976,47 +979,25 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
-int fat_mountCheck(int device)
+void fat_mountCheck()
 {
-	int ret;
-	mass_dev* mass_device;
-
-	//XPRINTF("usb fat: mountCheck device %i \n", device);
-	fat_driver* fatd = fat_getData(device);
-	if (fatd == NULL || fatd->devId == -1)
-		return -ENODEV;
-
-	if (fatd->mounted)
-		return 0;
-
-	mass_device = mass_stor_getDevice(fatd->devId);
-
-	ret = mass_stor_getStatus(mass_device);
-	if (ret < 0)
-		return ret;
-
-	ret = DISK_INIT(fatd->devId, mass_device->sectorSize); // modified by Hermes
-	if (ret < 0) {
-		printf ("fat_driver: disk init failed \n" );
-		return ret;
-	}
-
-	fatd->lastChainCluster = 0xFFFFFFFF;
-	fatd->lastChainResult = -1;
-
-	fat_getPartitionTable(fatd);
-	fat_getPartitionBootSector(fatd);
-
-	fatd->mounted = 1;
-	return ret;
+	mass_stor_configureDevices();
 }
 
 //---------------------------------------------------------------------------
 int fat_connect(int devId)
 {
+	int ret;
+	mass_dev* mass_device;
 	XPRINTF("usb fat: connect devId %i \n", devId);
 
 	fat_driver* fatd = fat_findData(devId, 1);
+
+	if (fatd == NULL)
+	{
+		printf("usb fat: unable to allocate drive!\n");
+		return -1;
+	}
 
 	if (fatd->mounted)
 	{
@@ -1024,10 +1005,25 @@ int fat_connect(int devId)
 		fat_forceUnmount(fatd);
 	}
 
+	mass_device = mass_stor_getDevice(devId);
+
+	ret = DISK_INIT(devId, mass_device->sectorSize); // modified by Hermes
+	if (ret < 0) {
+		printf ("fat_driver: disk init failed \n" );
+		return ret;
+	}
+
 	fatd->devId = devId;
 	fatd->deIdx = 0;
 	fatd->clStackIndex = 0;
 	fatd->clStackLast = 0;
+	fatd->lastChainCluster = 0xFFFFFFFF;
+	fatd->lastChainResult = -1;
+
+	fat_getPartitionTable(fatd);
+	fat_getPartitionBootSector(fatd);
+
+	fatd->mounted = 1;
 
 	return 0;
 }
@@ -1146,8 +1142,16 @@ void fat_forceUnmount(fat_driver* fatd) //dlanor: added for disconnection events
 }
 
 //---------------------------------------------------------------------------
-fat_driver * fat_getData(int device) {
- 	return g_fatd[device];
+fat_driver * fat_getData(int device)
+{
+    if (device >= NUM_DEVICES)
+        return NULL;
+
+    fat_driver* fatd = g_fatd[device];
+    if (fatd == NULL || fatd->devId == -1 || !fatd->mounted)
+        return NULL;
+    else
+        return fatd;
 }
 
 //---------------------------------------------------------------------------

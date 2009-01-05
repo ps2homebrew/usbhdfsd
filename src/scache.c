@@ -101,8 +101,11 @@ cache_set* findCache(int devId, int create)
             if (create)
             {
                 g_cache[i] = malloc(sizeof(cache_set));
-                g_cache[i]->devId = devId;
-                g_cache[i]->sectorBuf = NULL;
+                if (g_cache[i] != NULL)
+                {
+                    g_cache[i]->devId = devId;
+                    g_cache[i]->sectorBuf = NULL;
+                }
                 return g_cache[i];
             }
             else
@@ -234,7 +237,7 @@ int scache_readSector(int devId, unsigned int sector, void** buf) {
 
 	XPRINTF("cache: readSector devId = %i %X sector = %i \n", devId, (int) cache, sector);
     if (cache == NULL) {
-        XPRINTF("cache: devId cache not created = %i \n", devId);
+        printf("cache: devId cache not created = %i \n", devId);
         return -1;
     }
     
@@ -348,12 +351,17 @@ int scache_init(int devId, int sectSize)
 
 	cache_set* cache = findCache(devId, 1);
 
+	if (cache == NULL) {
+		printf("scache init! Sector cache: can't alloate cache!\n");
+		return -1;
+	}
+
 	if (cache->sectorBuf == NULL) {
 		XPRINTF("scache init! \n");
 		XPRINTF("sectorSize: 0x%x\n", cache->sectorSize);
 		cache->sectorBuf = (unsigned char*) malloc(4096 * CACHE_SIZE ); //allocate 4096 bytes per 1 cache record
 		if (cache->sectorBuf == NULL) {
-			XPRINTF("Sector cache: can't alloate memory of size:%d \n", 4096 * CACHE_SIZE);
+			printf("Sector cache: can't alloate memory of size:%d \n", 4096 * CACHE_SIZE);
 			return -1;
 		}
 		XPRINTF("Sector cache: allocated memory at:%p of size:%d \n", cache->sectorBuf, 4096 * CACHE_SIZE);

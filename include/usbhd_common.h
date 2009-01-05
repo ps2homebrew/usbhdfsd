@@ -32,8 +32,6 @@
 //#define MASS_CONNECT_CALLBACK    0x0012
 //#define MASS_DISCONNECT_CALLBACK 0x0013
 
-#define FAT_ERROR           -1
-
 int fs_init   (iop_device_t *driver); 
 int fs_open   (iop_file_t* , const char *name, int mode);
 int fs_lseek  (iop_file_t* , unsigned long offset, int whence);

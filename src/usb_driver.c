@@ -72,6 +72,8 @@ typedef struct _sense_data {
 
 static UsbDriver driver;
 
+volatile int wait_for_connect = 1;
+
 /*
 int _sc_sema_id = 0;
 int _si_sema_id = 0;
@@ -88,7 +90,6 @@ static int returnSize;
 static int residue;
 
 static mass_dev* g_mass_device[NUM_DEVICES];
-
 
 
 inline void initCBWPacket(cbw_packet* packet)
@@ -547,9 +548,12 @@ mass_dev* mass_stor_findDevice(int devId, int create)
             if (create)
             {
                 g_mass_device[i] = malloc(sizeof(mass_dev));
-                g_mass_device[i]->devId = devId;
-                g_mass_device[i]->status = 0;
-                g_mass_device[i]->sectorSize = 0;
+                if (g_mass_device[i] != NULL)
+                {
+                    g_mass_device[i]->devId = devId;
+                    g_mass_device[i]->status = 0;
+                    g_mass_device[i]->sectorSize = 0;
+                }
                 return g_mass_device[i];
             }
             else
@@ -705,8 +709,15 @@ int mass_stor_connect(int devId)
 	UsbEndpointDescriptor *endpoint;
 	mass_dev* dev;
 
+	wait_for_connect = 0;
+
 	printf ("usb_mass: connect: devId=%i\n", devId);
 	dev = mass_stor_findDevice(devId, 1);
+
+	if (dev == NULL) {
+		printf("usb_mass: Error - unable to allocate space!\n");
+		return 1;
+	}
 
 	/* only one mass device allowed */
 	if (dev->status & DEVICE_DETECTED) {
@@ -756,10 +767,9 @@ int mass_stor_connect(int devId)
 
 	/*store current configuration id - can't call set_configuration here */
 	dev->configId = config->bConfigurationValue;
-	dev->status |= DEVICE_DETECTED;
+	dev->status = DEVICE_DETECTED;
 	XPRINTF("usb_mass: connect ok: epI=%i, epO=%i \n", dev->bulkEpI, dev->bulkEpO);
 
-	fat_connect(devId);
 	return 0;
 }
 
@@ -952,54 +962,37 @@ int mass_stor_warmup(mass_dev *dev) {
 
 }
 
-int _delay_detect = 1;
-
-int mass_stor_getStatus(mass_dev* mass_device)
+void mass_stor_configureDevices()
 {
 	int i;
-    mass_dev *dev = mass_device;
 
-	XPRINTF("mass_stor: getting status... \n");
+    // give the USB driver some time to detect the device
+    i = 10000;
+    while (wait_for_connect && (--i > 0))
+        DelayThread(100);
 
-    if (dev == NULL)
+	XPRINTF("mass_stor: configuring devices... \n");
+
+    for (i = 0; i < NUM_DEVICES; ++i)
     {
-		XPRINTF("usb_mass: Error - no mass storage device found!\n");
-		return -ENODEV;
+        mass_dev *dev = g_mass_device[i];
+        if (dev != NULL && (dev->status & DEVICE_DETECTED) && !(dev->status & DEVICE_CONFIGURED))
+        {
+            int ret;
+            set_configuration(dev, dev->configId);
+            set_interface(dev, dev->interfaceNumber, dev->interfaceAlt);
+            dev->status |= DEVICE_CONFIGURED;
+
+            ret = mass_stor_warmup(dev);
+            if (ret < 0)
+            {
+                printf("mass_stor: failed to warmup device %d\n", dev->devId);
+                mass_stor_release(dev);
+            }
+            else
+                fat_connect(dev->devId);
+        }
     }
-    
-    if(_delay_detect)
-    {
-        // give the USB driver some time to detect the device
-        i = 10000;
-    	while(!(dev->status & DEVICE_DETECTED) && (--i > 0)) DelayThread(100);
-    	_delay_detect = 0;
-    }
-
-	XPRINTF("mass_stor: status %i \n", dev->status);
-
-    // fail if the device is still not detected.
-	if (!(dev->status & DEVICE_DETECTED))
-	{
-		XPRINTF("usb_mass: Error - no mass storage device found!\n");
-		return -ENODEV;
-	}
-
-	if (!(dev->status & DEVICE_CONFIGURED))
-	{
-		set_configuration(dev, dev->configId);
-		set_interface(dev, dev->interfaceNumber, dev->interfaceAlt);
-		dev->status |= DEVICE_CONFIGURED;
-
-		i= mass_stor_warmup(dev);
-
-		if (i < 0)
-		{
-			mass_stor_release(dev);
-			return i;
-		}
-	}
-
-	return dev->status;
 }
 
 int InitUSB()

@@ -237,11 +237,10 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	XPRINTF("fs_open called: %s mode=%X \n", name, mode) ;
 
-	//check if media mounted
-	ret = fat_mountCheck(fd->unit);
-	if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	//check if the file is already open
 	rec2 = fs_findFileSlotByName(name);
@@ -314,15 +313,13 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 //---------------------------------------------------------------------------
 int fs_close(iop_file_t* fd) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
-    int ret;
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	rec->file_flag = -1;
 
@@ -342,13 +339,13 @@ int fs_close(iop_file_t* fd) {
 //---------------------------------------------------------------------------
 int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
-    int ret;
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
+
+	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	switch(whence) {
 		case SEEK_SET:
@@ -381,15 +378,13 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
 	int updateClusterIndices;
-    int ret;
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	updateClusterIndices = 0;
 
@@ -416,15 +411,13 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 int fs_read(iop_file_t* fd, void * buffer, int size ) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
-    int ret;
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if (size<=0) {
 	    _fs_unlock();
@@ -473,16 +466,16 @@ int fs_remove (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-    //check if media mounted
-    result = fat_mountCheck(fd->unit);
-    if (result < 0)
+	fat_mountCheck();
+
+	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL)
     {
+		result = -ENODEV;
 		removalResult = result;
         _fs_unlock();
  		return result;
 	}
-
-	fat_driver* fatd = fat_getData(fd->unit);
 
 	rec = fs_findFileSlotByName(name);
 	//store filename signature and time of removal
@@ -516,11 +509,10 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	XPRINTF("fs_mkdir: name=%s \n",name);
 	//workaround for bug that invokes fioMkdir right after fioRemove
@@ -553,11 +545,10 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-    //check if media mounted
-    ret = fat_mountCheck(fd->unit);
-    if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	ret = fat_deleteFile(fatd, name, 1);
 	FLUSH_SECTORS(fatd);
@@ -575,11 +566,10 @@ int fs_dopen  (iop_file_t *fd, const char *name)
     
     XPRINTF("fs_dopen called: unit %d name %s\n", fd->unit, name);
 
-	//check if media mounted
-	ret = fat_mountCheck(fd->unit);
-	if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if( ((name[0] == '/') && (name[1] == '\0'))
 		||((name[0] == '/') && (name[1] == '.') && (name[2] == '\0')))
@@ -621,7 +611,6 @@ int fs_dclose (iop_file_t *fd)
 int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 {
 	int notgood;
-	int ret;
 	fs_dir* rec = (fs_dir *) fd->privdata;
 
 
@@ -629,11 +618,10 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
     
     XPRINTF("fs_dread called: unit %d\n", fd->unit);
 
-	//check if media mounted
-	ret = fat_mountCheck(fd->unit);
-	if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	do {
 		if (rec->status)
@@ -668,17 +656,16 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 
 	_fs_lock();
 
-	//check if media mounted
-	ret = fat_mountCheck(fd->unit);
-	if (ret < 0) { _fs_unlock(); return ret; }
+	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	XPRINTF("Calling fat_getFileStartCluster from fs_getstat\n");
 	ret = fat_getFileStartCluster(fatd, name, &cluster, &fatdir);
 	if (ret < 0) {
 		_fs_unlock();
-		return -1;
+		return ret;
 	}
 
 	memset(stat, 0, sizeof(fio_stat_t));
@@ -707,14 +694,15 @@ int fs_format (iop_file_t *fd)
 }
 
 //---------------------------------------------------------------------------
-int fs_ioctl  (iop_file_t *fd, unsigned long request, void *data)
+int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 {
-	int ret;
-
+    int ret;
 	_fs_lock();
-	//check if media mounted
-	ret = fat_mountCheck(fd->unit);
-	if (ret < 0) goto return_ret;
+
+	fat_mountCheck();
+
+	fat_driver* fatd = fat_getData(fd->unit);
+	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	switch (request) {
 		case IOCTL_CKFREE:  //Request to calculate free space (ignore file/folder selected)
@@ -726,7 +714,7 @@ int fs_ioctl  (iop_file_t *fd, unsigned long request, void *data)
 		default:
 			ret = fs_dummy();
 	}
-return_ret:
+
 	_fs_unlock();
 	return ret;
 }
