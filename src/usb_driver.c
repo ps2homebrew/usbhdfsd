@@ -85,8 +85,12 @@ int _ubc_sema_id = 0;
 int _ubt_sema_id = 0;
 */
 
-static int returnCode;
-static int returnSize;
+typedef struct _usb_callback_data {
+    int semh;
+    int returnCode;
+    int returnSize;
+} usb_callback_data;
+
 static int residue;
 
 static mass_dev* g_mass_device[NUM_DEVICES];
@@ -232,27 +236,27 @@ inline void cbw_scsi_write_sector(cbw_packet* packet, int lba, int sectorSize, i
 
 void usb_callback(int resultCode, int bytes, void *arg)
 {
-	int semh = (int) arg;
-	returnCode = resultCode;
-	returnSize = bytes;
+	usb_callback_data* data = (usb_callback_data*) arg;
+	data->returnCode = resultCode;
+	data->returnSize = bytes;
 	XPRINTF("Usb - callback: res %d, bytes %d, arg %p \n", resultCode, bytes, arg);
-	SignalSema(semh);
+	SignalSema(data->semh);
 }
 
 void set_configuration(mass_dev* dev, int configNumber) {
 	int ret;
-	int semh;
+	usb_callback_data cb_data;
 	iop_sema_t s;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	XPRINTF("setting configuration controlEp=%i, confNum=%i \n", dev->controlEp, configNumber);
 
-	ret = UsbSetDeviceConfiguration(dev->controlEp, configNumber, usb_callback, (void*)semh);
+	ret = UsbSetDeviceConfiguration(dev->controlEp, configNumber, usb_callback, (void*)&cb_data);
 
 	if(ret != USB_RC_OK)
 	{
@@ -261,66 +265,66 @@ void set_configuration(mass_dev* dev, int configNumber) {
 	else
 	{
 		XPRINTF("Waiting for config done...\n");
-		WaitSema(semh);
+		WaitSema(cb_data.semh);
 	}
 
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 }
 
 void set_interface(mass_dev* dev, int interface, int altSetting) {
 	int ret;
-	int semh;
+	usb_callback_data cb_data;
 	iop_sema_t s;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 
 	XPRINTF("setting interface controlEp=%i, interface=%i altSetting=%i\n", dev->controlEp, interface, altSetting);
 
-	ret = UsbSetInterface(dev->controlEp, interface, altSetting, usb_callback, (void*)semh);
+	ret = UsbSetInterface(dev->controlEp, interface, altSetting, usb_callback, (void*)&cb_data);
 
         if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending set_interface\n");
 	} else {
 		XPRINTF("Waiting for interface done...\n");
-		WaitSema(semh);
+		WaitSema(cb_data.semh);
 	}
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 
 }
 
 void set_device_feature(mass_dev* dev, int feature) {
 	int ret;
-	int semh;
+	usb_callback_data cb_data;
 	iop_sema_t s;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	XPRINTF("setting device feature controlEp=%i, feature=%i\n", dev->controlEp, feature);
 
-	ret = UsbSetDeviceFeature(dev->controlEp, feature, usb_callback, (void*)semh);
+	ret = UsbSetDeviceFeature(dev->controlEp, feature, usb_callback, (void*)&cb_data);
 
 	if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending set_device feature\n");
 	} else {
 		XPRINTF("Waiting for set device feature done...\n");
-		WaitSema(semh);
+		WaitSema(cb_data.semh);
 	}
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 
 }
 
 void usb_bulk_clear_halt(mass_dev* dev, int direction) {
 	int ret;
-	int semh;
+	usb_callback_data cb_data;
 	iop_sema_t s;
 	int endpoint;
 
@@ -336,37 +340,37 @@ void usb_bulk_clear_halt(mass_dev* dev, int direction) {
 		endpoint = dev->bulkEpOAddr;
 	}
 
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 	ret = UsbClearEndpointFeature(
 		dev->controlEp, 		//Config pipe
 		0,			//HALT feature
 		endpoint,
 		usb_callback,
-		(void*)semh
+		(void*)&cb_data
 		);
 
 	if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending clear halt\n");
 		return;
 	}else {
-		XPRINTF("wait clear halt semaId=%i\n", semh);
-		WaitSema(semh);
+		XPRINTF("wait clear halt semaId=%i\n", cb_data.semh);
+		WaitSema(cb_data.semh);
 	}
 
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 
 }
 
 void usb_bulk_reset(mass_dev* dev, int mode) {
 	int ret;
-	int semh;
+	usb_callback_data cb_data;
 	iop_sema_t s;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	//Call Bulk only mass storage reset
 	ret = UsbControlTransfer(
@@ -378,17 +382,17 @@ void usb_bulk_reset(mass_dev* dev, int mode) {
 		0,			//length
 		NULL,			//data
 		usb_callback,
-		(void*) semh
+		(void*) &cb_data
 		);
 
 	if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending reset request\n");
 		return;
 	}else {
-		XPRINTF("wait reset semaId=%i\n", semh);
-		WaitSema(semh);
+		XPRINTF("wait reset semaId=%i\n", cb_data.semh);
+		WaitSema(cb_data.semh);
 	}
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 
 	//clear bulk-in endpoint
 	if (mode & 0x01) {
@@ -404,13 +408,13 @@ void usb_bulk_reset(mass_dev* dev, int mode) {
 int usb_bulk_status(mass_dev* dev, csw_packet* csw, int tag) {
 	int ret;
 	iop_sema_t s;
-	int semh;
+	usb_callback_data cb_data;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	initCSWPacket(csw);
 	csw->tag = tag;
@@ -422,16 +426,16 @@ int usb_bulk_status(mass_dev* dev, csw_packet* csw, int tag) {
 		csw,			//data ptr
 		13,			//data length
 		usb_callback,
-		(void*)semh
+		(void*)&cb_data
 	);
 	if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending csw bulk command\n");
-		DeleteSema(semh);
+		DeleteSema(cb_data.semh);
 		return -1;
 	}else {
-		WaitSema(semh);
+		WaitSema(cb_data.semh);
 	}
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 	XPRINTF("Usb: bulk csw.status: %i\n", csw->status);
 	return csw->status;
 }
@@ -467,27 +471,27 @@ int usb_bulk_manage_status(mass_dev* dev, int tag) {
 void usb_bulk_command(mass_dev* dev, cbw_packet* packet ) {
 	int ret;
 	iop_sema_t s;
-	int semh;
+	usb_callback_data cb_data;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	ret =  UsbBulkTransfer(
 		dev->bulkEpO,		//bulk output pipe
 		packet,			//data ptr
 		31,			//data length
 		usb_callback,
-		(void*)semh
+		(void*)&cb_data
 	);
 	if(ret != USB_RC_OK) {
 		XPRINTF("Usb: Error sending bulk command\n");
 	}else {
-		WaitSema(semh);
+		WaitSema(cb_data.semh);
 	}
-	DeleteSema(semh);
+	DeleteSema(cb_data.semh);
 
 }
 
@@ -498,13 +502,13 @@ int usb_bulk_transfer(int pipe, void* buffer, int transferSize) {
 	int offset = 0;
 
 	iop_sema_t s;
-	int semh;
+	usb_callback_data cb_data;
 
 	s.initial = 0;
 	s.max = 1;
 	s.option = 0;
 	s.attr = 0;
-	semh = CreateSema(&s);
+	cb_data.semh = CreateSema(&s);
 
 	while (transferSize > 0) {
 		if (transferSize < blockSize) {
@@ -516,25 +520,25 @@ int usb_bulk_transfer(int pipe, void* buffer, int transferSize) {
 			(buf + offset),		//data ptr
 			blockSize,		//data length
 			usb_callback,
-			(void*)semh
+			(void*)&cb_data
 		);
 		if(ret != USB_RC_OK) {
 			XPRINTF("Usb: Error sending bulk data transfer \n");
-			returnCode = -1;
+			cb_data.returnCode = -1;
 			break;
 		}else {
-			WaitSema(semh);
-			XPRINTF(" retCode=%i retSize=%i \n", returnCode, returnSize);
-			if (returnCode > 0) {
+			WaitSema(cb_data.semh);
+			XPRINTF(" retCode=%i retSize=%i \n", cb_data.returnCode, cb_data.returnSize);
+			if (cb_data.returnCode > 0) {
 				residue = blockSize;
 				break;
 			}
-			offset += returnSize;
-			transferSize-= returnSize;
+			offset += cb_data.returnSize;
+			transferSize-= cb_data.returnSize;
 		}
 	}
-	DeleteSema(semh);
-	return returnCode;
+	DeleteSema(cb_data.semh);
+	return cb_data.returnCode;
 }
 
 mass_dev* mass_stor_findDevice(int devId, int create)
@@ -835,13 +839,13 @@ int mass_stor_warmup(mass_dev *dev) {
 	usb_bulk_command(dev, &cbw);
 
 	XPRINTF("-INQUIRY READ DATA\n");
-	usb_bulk_transfer(dev->bulkEpI, buffer, 36);
+	int returnCode = usb_bulk_transfer(dev->bulkEpI, buffer, 36);
 
 	XPRINTF("-INQUIRY STATUS\n");
 	residue = 0;
 	usb_bulk_manage_status(dev, -TAG_INQUIRY);
 
-	if (returnSize <= 0) {
+	if (returnCode < 0) {
 		printf("!Error: device not ready!\n");
 		return -ENODEV;
 	}
@@ -934,7 +938,7 @@ int mass_stor_warmup(mass_dev *dev) {
 		usb_bulk_command(dev, &cbw);
 
 		XPRINTF("-RC DATA\n");
-		usb_bulk_transfer(dev->bulkEpI, buffer, 8);
+		int returnCode = usb_bulk_transfer(dev->bulkEpI, buffer, 8);
 
 		//HACK HACK HACK !!!
 		//according to usb doc we should allways
