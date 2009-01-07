@@ -6,14 +6,11 @@
 typedef struct _fat_driver {
 	int devId;
 	int	mounted;	//disk mounted=1 not mounted=0
-	fat_part partTable;	//partition master record
 	fat_bpb  partBpb;	//partition bios parameter block
 
 	// modified by Hermes
 #define MAX_DIR_CLUSTER 512
 	unsigned int cbuf[MAX_DIR_CLUSTER]; //cluster index buffer // 2048 by Hermes
-
-	int workPartition;
 
 	unsigned int  lastChainCluster;
 	int lastChainResult;
@@ -50,17 +47,9 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir);
 int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir);
 
-int getI32(unsigned char* buf);
-int getI32_2(unsigned char* buf1, unsigned char* buf2);
-int getI16(unsigned char* buf);
-int strEqual(unsigned char *s1, unsigned char* s2);
-unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
-unsigned int fat_cluster2sector(fat_driver* fatd, unsigned int cluster);
-
 fat_driver * fat_getData(int device);
 int      fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir);
 int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
-unsigned int fat_cluster2sector(fat_driver* fatd, unsigned int cluster);
 int      fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
 int      fat_getClusterChain(fat_driver* fatd, unsigned int cluster, unsigned int* buf, int bufSize, int start);
 void     fat_invalidateLastChainResult(fat_driver* fatd);

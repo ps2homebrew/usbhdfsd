@@ -1145,7 +1145,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 
 		//At cluster borders, get correct sector from cluster chain buffer
 		if ((*startCluster != 0) && (i % fatd->partBpb.clusterSize == 0)) {
-			startSector = fat_cluster2sector(fatd, fatd->cbuf[(i / fatd->partBpb.clusterSize)]) -i;
+			startSector = fat_cluster2sector(&fatd->partBpb, fatd->cbuf[(i / fatd->partBpb.clusterSize)]) -i;
 		}
 		theSector = startSector + i;
 		ret = READ_SECTOR(fatd->devId, theSector, sbuf);
@@ -1278,7 +1278,7 @@ int enlargeDirentryClusterSpace(fat_driver* fatd, unsigned int startCluster, int
 	}
 
 	// now clean the directory space
-	startSector = fat_cluster2sector(fatd, newCluster);
+	startSector = fat_cluster2sector(&fatd->partBpb, newCluster);
 	for (i = 0; i < fatd->partBpb.clusterSize; i++) {
 		unsigned char* sbuf = NULL; //sector buffer
 
@@ -1347,7 +1347,7 @@ int createDirectorySpace(fat_driver* fatd, unsigned int dirCluster, unsigned int
 
 	//we create directory space inside one cluster. No need to worry about
 	//large dir space spread on multiple clusters
-	startSector = fat_cluster2sector(fatd, dirCluster);
+	startSector = fat_cluster2sector(&fatd->partBpb, dirCluster);
 	XPRINTF("I: create dir space: cluster=%d sector=%d (%d) \n", dirCluster, startSector, startSector * fatd->partBpb.sectorSize);
 
 	//go through all sectors of the cluster
@@ -1417,7 +1417,7 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 
 		//At cluster borders, get correct sector from cluster chain buffer
 		if ((startCluster != 0) && (i % fatd->partBpb.clusterSize == 0)) {
-			startSector = fat_cluster2sector(fatd, fatd->cbuf[(i / fatd->partBpb.clusterSize)]) -i;
+			startSector = fat_cluster2sector(&fatd->partBpb, fatd->cbuf[(i / fatd->partBpb.clusterSize)]) -i;
 		}
 		theSector = startSector + i;
 		ret = READ_SECTOR(fatd->devId, theSector, sbuf);
@@ -2121,7 +2121,7 @@ int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, 
 		//process the cluster chain (fatd->cbuf) and skip leading clusters if needed
 		for (i = 0 + clusterSkip; i < chainSize && size > 0; i++) {
 			//read cluster and save cluster content
-			startSector = fat_cluster2sector(fatd, fatd->cbuf[i]);
+			startSector = fat_cluster2sector(&fatd->partBpb, fatd->cbuf[i]);
 			//process all sectors of the cluster (and skip leading sectors if needed)
 			for (j = 0 + sectorSkip; j < fatd->partBpb.clusterSize && size > 0; j++) {
 				unsigned char* sbuf = NULL; //sector buffer

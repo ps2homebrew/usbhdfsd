@@ -223,4 +223,11 @@ typedef struct _fat_dir_record { // 140 bytes
 	unsigned int  size;		//file size, 0 for directory
 } fat_dir_record;
 
+int getI32(unsigned char* buf);
+int getI32_2(unsigned char* buf1, unsigned char* buf2);
+int getI16(unsigned char* buf);
+int strEqual(unsigned char *s1, unsigned char* s2);
+unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
+unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster);
+
 #endif /* _FAT_H */
