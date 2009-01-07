@@ -24,9 +24,9 @@
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
 
+#include "usbhd_common.h"
 #include "fat_driver.h"
 #include "fat_write.h"
-#include "usbhd_common.h"
 
 //#define DEBUG  //comment out this line when not debugging
 

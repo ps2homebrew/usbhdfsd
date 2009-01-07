@@ -9,7 +9,6 @@
 #include <stdio.h>
 
 extern int InitFAT();
-extern int InitCache();
 extern int InitFS();
 extern int InitUSB();
 
@@ -23,13 +22,6 @@ int _start( int argc, char **argv)
     if(InitFAT() != 0)
     {
         printf("Error initializing FAT driver!\n");
-        return(1);
-    }
-
-    // initialize the Cache
-    if(InitCache() != 0)
-    {
-        printf("Error initializing Cache!\n");
         return(1);
     }
 

@@ -1,7 +1,7 @@
 #ifndef _MASS_STOR_H
 #define _MASS_STOR_H 1
 
-typedef struct _mass_dev
+struct _mass_dev
 {
 	int controlEp;		//config endpoint id
 	int bulkEpI;		//in endpoint id
@@ -17,15 +17,15 @@ typedef struct _mass_dev
 	int interfaceAlt;	//interface alternate setting
 	unsigned sectorSize; // = 512; // store size of sector from usb mass
 	unsigned maxLBA;
-} mass_dev;
+	cache_set* cache;
+};
 
 int InitUSB();
 int mass_stor_disconnect(int devId);
 int mass_stor_connect(int devId);
 int mass_stor_probe(int devId);
-int mass_stor_readSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer);
-int mass_stor_writeSector4096(mass_dev* mass_device, unsigned int sector, unsigned char* buffer);
+int mass_stor_readSector(mass_dev* mass_device, unsigned int sector, unsigned char* buffer, int size);
+int mass_stor_writeSector(mass_dev* mass_device, unsigned int sector, unsigned char* buffer, int size);
 void mass_stor_configureDevices();
-mass_dev* mass_stor_getDevice(int devId);
 
 #endif

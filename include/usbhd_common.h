@@ -53,4 +53,9 @@ int fs_getstat(iop_file_t *, const char *, fio_stat_t *);
 
 int fs_chstat (iop_file_t *, const char *, fio_stat_t *, unsigned int);
 
+struct _cache_set;
+typedef struct _cache_set cache_set;
+struct _mass_dev;
+typedef struct _mass_dev mass_dev;
+
 #endif // _USBHD_COMMON_H

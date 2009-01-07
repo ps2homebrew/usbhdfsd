@@ -11,20 +11,20 @@
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
 
+#include "usbhd_common.h"
 #include "scache.h"
 #include "fat_driver.h"
 //#include "fat_write.h"
-#include "usbhd_common.h"
 #include "mass_stor.h"
 
 //#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
 
-#define DISK_INIT(d,b) scache_init((d), (b))
+//#define DISK_INIT(d,b) scache_init((d), (b))
 //#define DISK_CLOSE     scache_close
-#define DISK_KILL      scache_kill  //dlanor: added for disconnection events (no flush)
-#define READ_SECTOR(d, a, b)	scache_readSector((d), (a), (void **)&b)
+//#define DISK_KILL      scache_kill  //dlanor: added for disconnection events (no flush)
+#define READ_SECTOR(d, a, b)	scache_readSector((d)->cache, (a), (void **)&b)
 //#define FLUSH_SECTORS		scache_flushSectors
 
 static fat_driver* g_fatd[NUM_DEVICES];
@@ -75,11 +75,11 @@ int strEqual(unsigned char *s1, unsigned char* s2) {
     }
 }
 
-fat_driver* fat_findData(int devId, int create)
+fat_driver* fat_findData(mass_dev* dev, int create)
 {
 	int i;
 	fat_driver* empty = NULL;
-	XPRINTF("usb_mass: fat_findData devId %i\n", devId);
+	XPRINTF("usb_mass: fat_findData devId %i\n", dev->devId);
 	for (i = 0; i < NUM_DEVICES; ++i)
 	{
 		if (g_fatd[i] == NULL)
@@ -93,8 +93,7 @@ fat_driver* fat_findData(int devId, int create)
 					g_fatd[i] = malloc(sizeof(fat_driver));
 					if (g_fatd[i] != NULL)
 					{
-						g_fatd[i]->devId = -1;
-						g_fatd[i]->mounted = 0;
+						g_fatd[i]->dev = NULL;
 					}
 					return g_fatd[i];
 				}
@@ -102,12 +101,12 @@ fat_driver* fat_findData(int devId, int create)
 			else
 				return NULL;
 		}
-		else if (g_fatd[i]->devId == devId)
+		else if (g_fatd[i]->dev == dev)
 		{
 			XPRINTF("usb_mass: fat_findData exists %i\n", i);
 			return g_fatd[i];
 		}
-		else if (g_fatd[i]->devId == -1)
+		else if (g_fatd[i]->dev == NULL)
 		{
 			if (empty == NULL)
 				empty = g_fatd[i];
@@ -204,7 +203,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 			sectorSpan = 1;
 		}
 		if (lastFatSector !=  fatSector || sectorSpan) {
-				ret = READ_SECTOR(fatd->devId, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
+				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
 				if (ret < 0) {
 					printf("FAT driver:Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
 					return -1;
@@ -214,7 +213,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 				if (sectorSpan) {
 					xbuf[0] = sbuf[fatd->partBpb.sectorSize - 2];
 					xbuf[1] = sbuf[fatd->partBpb.sectorSize - 1];
-					ret = READ_SECTOR(fatd->devId, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
+					ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
 					if (ret < 0) {
 						printf("FAT driver:Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
 						return -1;
@@ -265,7 +264,7 @@ int fat_getClusterChain16(fat_driver* fatd, unsigned int cluster, unsigned int* 
 	while(i < bufSize && cont) {
 		fatSector = cluster / indexCount;
 		if (lastFatSector !=  fatSector) {
-				ret = READ_SECTOR(fatd->devId, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
+				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
 				if (ret < 0) {
 					printf("FAT driver:Read fat16 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
 					return -1;
@@ -310,7 +309,7 @@ int fat_getClusterChain32(fat_driver* fatd, unsigned int cluster, unsigned int* 
 	while(i < bufSize && cont) {
 		fatSector = cluster / indexCount;
 		if (lastFatSector !=  fatSector) {
-				ret = READ_SECTOR(fatd->devId, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
+				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
 				if (ret < 0) {
 					printf("FAT driver: Read fat32 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
 					return -1;
@@ -356,7 +355,7 @@ void fat_invalidateLastChainResult(fat_driver* fatd)
 }
 
 //---------------------------------------------------------------------------
-int fat_getPartitionTable(int devId, fat_part* part)
+int fat_getPartitionTable(mass_dev* dev, fat_part* part)
 {
     part_raw_record* part_raw;
     int              i;
@@ -365,7 +364,7 @@ int fat_getPartitionTable(int devId, fat_part* part)
 
     int workPartition = -1;
 
-    ret = READ_SECTOR(devId, 0, sbuf);  // read sector 0 - Disk MBR or boot sector
+    ret = READ_SECTOR(dev, 0, sbuf);  // read sector 0 - Disk MBR or boot sector
     if ( ret < 0 )
     {
         printf ( "FAT driver: Read sector 0 failed!\n" );
@@ -393,11 +392,10 @@ int fat_getPartitionTable(int devId, fat_part* part)
         if ( workPartition == -1 )
         {  // no partition table detected
             // try to use "floppy" option
-            mass_dev* mass_device = mass_stor_getDevice(devId);
             workPartition = 0;
             part -> record[ 0 ].sid   =
             part -> record[ 0 ].start = 0;
-            part -> record[ 0 ].count = mass_device->maxLBA;
+            part -> record[ 0 ].count = dev->maxLBA;
         }
     }
     return workPartition;
@@ -427,13 +425,13 @@ void fat_determineFatType(fat_bpb* partBpb) {
 }
 
 //---------------------------------------------------------------------------
-void fat_getPartitionBootSector(int devId, part_record* part_rec, fat_bpb* partBpb) {
+void fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* partBpb) {
 	fat_raw_bpb* bpb_raw; //fat16, fat12
 	fat32_raw_bpb* bpb32_raw; //fat32
 	int ret;
 	unsigned char* sbuf = NULL; //sector buffer
 
-	ret = READ_SECTOR(devId, part_rec->start, sbuf); //read partition boot sector (first sector on partition)
+	ret = READ_SECTOR(dev, part_rec->start, sbuf); //read partition boot sector (first sector on partition)
 
 	if (ret < 0) {
 		printf("FAT driver: Read partition boot sector failed sector=%i! \n", part_rec->start);
@@ -745,7 +743,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 	int cont;
 	int ret;
 	int dirPos;
-	mass_dev* mass_device = mass_stor_getDevice(fatd->devId);
+	mass_dev* mass_device = fatd->dev;
 
 	cont = 1;
 	XPRINTF("\n");
@@ -768,7 +766,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 			startSector = fat_cluster2sector(&fatd->partBpb, fatd->cbuf[(i / fatd->partBpb.clusterSize)]) -i;
 		}
 
-		ret = READ_SECTOR(fatd->devId, startSector + i, sbuf);
+		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
 			printf("FAT driver: read directory sector failed ! sector=%i\n", startSector + i);
 			return -1;
@@ -894,7 +892,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 	int sectorSkip;
 	int clusterSkip;
 	int dataSkip;
-	mass_dev* mass_device = mass_stor_getDevice(fatd->devId);
+	mass_dev* mass_device = fatd->dev;
 
 	unsigned int bufferPos;
 	unsigned int fileCluster;
@@ -949,7 +947,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 			for (j = 0 + sectorSkip; j < fatd->partBpb.clusterSize && size > 0; j++) {
 				unsigned char* sbuf = NULL; //sector buffer
 
-				ret = READ_SECTOR(fatd->devId, startSector + j, sbuf);
+				ret = READ_SECTOR(fatd->dev, startSector + j, sbuf);
 				if (ret < 0) {
 					printf("Read sector failed ! sector=%i\n", startSector + j);
 					return bufferPos;
@@ -984,66 +982,51 @@ void fat_mountCheck()
 }
 
 //---------------------------------------------------------------------------
-int fat_connect(int devId)
+int fat_connect(mass_dev* dev)
 {
-	int ret;
-	mass_dev* mass_device;
-	XPRINTF("usb fat: connect devId %i \n", devId);
-
-	fat_driver* fatd = fat_findData(devId, 1);
-
-	if (fatd == NULL)
-	{
-		printf("usb fat: unable to allocate drive!\n");
-		return -1;
-	}
-
-	if (fatd->mounted)
-	{
-		printf("usb fat: mount ERROR: alread mounted\n");
-		fat_forceUnmount(fatd);
-	}
-
-	mass_device = mass_stor_getDevice(devId);
-
-	ret = DISK_INIT(devId, mass_device->sectorSize); // modified by Hermes
-	if (ret < 0) {
-		printf ("fat_driver: disk init failed \n" );
-		return ret;
-	}
-
-	fatd->devId = devId;
-	fatd->deIdx = 0;
-	fatd->clStackIndex = 0;
-	fatd->clStackLast = 0;
-	fatd->lastChainCluster = 0xFFFFFFFF;
-	fatd->lastChainResult = -1;
+	XPRINTF("usb fat: connect devId %i \n", dev->devId);
 
 	fat_part partTable;
-	int workPartition = fat_getPartitionTable(devId, &partTable);
+	int workPartition = fat_getPartitionTable(dev, &partTable);
 	if (workPartition >= 0)
 	{
-		fat_getPartitionBootSector(devId, &partTable.record[workPartition], &fatd->partBpb);
+		fat_driver* fatd = fat_findData(dev, 1);
 
-		fatd->mounted = 1;
+		if (fatd == NULL)
+		{
+		printf("usb fat: unable to allocate drive!\n");
+			return -1;
+		}
+
+		if (fatd->dev != NULL)
+		{
+			printf("usb fat: mount ERROR: alread mounted\n");
+			fat_forceUnmount(fatd);
+		}
+
+		fat_getPartitionBootSector(dev, &partTable.record[workPartition], &fatd->partBpb);
+
+		fatd->dev = dev;
+		fatd->deIdx = 0;
+		fatd->clStackIndex = 0;
+		fatd->clStackLast = 0;
+		fatd->lastChainCluster = 0xFFFFFFFF;
+		fatd->lastChainResult = -1;
 	}
 
 	return 0;
 }
 
 //---------------------------------------------------------------------------
-int fat_disconnect(int devId)
+int fat_disconnect(mass_dev* dev)
 {
-	XPRINTF("usb fat: disconnect devId %i \n", devId);
-	fat_driver* fatd = fat_findData(devId, 0);
+	XPRINTF("usb fat: disconnect devId %i \n", dev->devId);
+	fat_driver* fatd = fat_findData(dev, 0);
 
 	if (fatd != NULL)
 	{
 		fat_forceUnmount(fatd);
-		fatd->devId = -1;
 	}
-
-	DISK_KILL(devId);
 
 	return 0;
 }
@@ -1060,7 +1043,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 	int ret;
 	int dirPos;
 	unsigned int dirCluster;
-	mass_dev* mass_device = mass_stor_getDevice(fatd->devId);
+	mass_dev* mass_device = fatd->dev;
 
 	//the getFirst function was not called
 	if (fatdlist->direntryCluster == 0xFFFFFFFF || fatDir == NULL) {
@@ -1092,7 +1075,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 				-i + (i % fatd->partBpb.clusterSize);
 			new_entry = 0;
 		}
-		ret = READ_SECTOR(fatd->devId, startSector + i, sbuf);
+		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
 			printf("Read directory  sector failed ! sector=%i\n", startSector + i);
 			return -3;
@@ -1138,9 +1121,9 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlis
 //---------------------------------------------------------------------------
 void fat_forceUnmount(fat_driver* fatd) //dlanor: added for disconnection events (flush impossible)
 {
-	XPRINTF("usb fat: forceUnmount devId %i \n", fatd->devId);
-	if(fatd->mounted) {
-		fatd->mounted = 0;
+	XPRINTF("usb fat: forceUnmount devId %i \n", fatd->dev->devId);
+	if(fatd->dev != NULL) {
+		fatd->dev = NULL;
 	}
 }
 
@@ -1151,7 +1134,7 @@ fat_driver * fat_getData(int device)
         return NULL;
 
     fat_driver* fatd = g_fatd[device];
-    if (fatd == NULL || fatd->devId == -1 || !fatd->mounted)
+    if (fatd == NULL || fatd->dev == NULL)
         return NULL;
     else
         return fatd;
@@ -1161,10 +1144,10 @@ fat_driver * fat_getData(int device)
 int fat_readSector(fat_driver* fatd, unsigned int sector, unsigned char** buf)
 {
 	int ret;
-	mass_dev* mass_device = mass_stor_getDevice(fatd->devId);
+	mass_dev* mass_device = fatd->dev;
 	unsigned char* sbuf = NULL; //sector buffer
 
-	ret = READ_SECTOR(fatd->devId, sector, sbuf);
+	ret = READ_SECTOR(fatd->dev, sector, sbuf);
 	if (ret < 0) {
 		printf("Read sector failed ! sector=%i\n", sector);
 		return -1;

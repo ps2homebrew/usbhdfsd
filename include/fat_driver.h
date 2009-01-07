@@ -4,8 +4,7 @@
 #include "fat.h"
 
 typedef struct _fat_driver {
-	int devId;
-	int	mounted;	//disk mounted=1 not mounted=0
+	mass_dev* dev;
 	fat_bpb  partBpb;	//partition bios parameter block
 
 	// modified by Hermes
