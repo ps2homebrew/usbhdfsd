@@ -1856,7 +1856,7 @@ int fat_createFile(fat_driver* fatd, const char* fname, char directory, char esc
 	unsigned int directoryCluster;
 	unsigned char path[FAT_MAX_PATH];
 	unsigned char lname[FAT_MAX_NAME];
-
+	fat_dir fatdir;
 
 	ret = separatePathAndName(fname, path, lname);
 	if(	(ret < 0)               //if name invalid to separation routine
@@ -1878,13 +1878,21 @@ int fat_createFile(fat_driver* fatd, const char* fname, char directory, char esc
 	XPRINTF("Calling fat_getFileStartCluster from fat_createFile\n");
 	//get start cluster of the last sub-directory of the path
 	startCluster = 0;
-	ret = fat_getFileStartCluster(fatd, (const char*)path, &startCluster, NULL);
-	if (ret > 0) {
-		XPRINTF("directory=%s name=%s cluster=%d \n", path, lname, startCluster);
-	}else {
+	ret = fat_getFileStartCluster(fatd, (const char*)path, &startCluster, &fatdir);
+	if (ret < 0) {
+		XPRINTF("E: directory not found! \n");
+		return ret;
+	}
+    
+	if (!(fatdir.attr & FAT_ATTR_DIRECTORY)) {
 		XPRINTF("E: directory not found! \n");
 		return -ENOENT;
 	}
+    
+    XPRINTF("directory=%s name=%s cluster=%d \n", path, lname, startCluster);
+    
+    if (fatdir.attr & FAT_ATTR_READONLY)
+        return -EACCES;
 
 	//modify directory space of the path (cread direntries)
 	//and/or create new (empty) directory space if directory creation requested
@@ -1913,7 +1921,7 @@ int fat_createFile(fat_driver* fatd, const char* fname, char directory, char esc
 		XPRINTF("I: file already exists at cluster=%d\n", startCluster);
 		return 2;
 	}
-	return 1;
+	return 0;
 }
 
 
@@ -1924,7 +1932,7 @@ int fat_deleteFile(fat_driver* fatd, const char* fname, char directory) {
 	unsigned int directoryCluster;
 	unsigned char path[FAT_MAX_PATH];
 	unsigned char lname[FAT_MAX_NAME];
-
+	fat_dir fatdir;
 
 	ret = separatePathAndName(fname, path, lname);
 	if(	(ret < 0)               //if name invalid to separation routine
@@ -1946,13 +1954,21 @@ int fat_deleteFile(fat_driver* fatd, const char* fname, char directory) {
 	XPRINTF("Calling fat_getFileStartCluster from fat_deleteFile\n");
 	//get start cluster of the last sub-directory of the path
 	startCluster = 0;
-	ret = fat_getFileStartCluster(fatd, (const char*)path, &startCluster, NULL);
-	if (ret > 0) {
-		XPRINTF("directory=%s name=%s cluster=%d \n", path, lname, startCluster);
-	}else {
+	ret = fat_getFileStartCluster(fatd, (const char*)path, &startCluster, &fatdir);
+	if (ret < 0) {
+		XPRINTF("E: directory not found! \n");
+		return ret;
+	}
+    
+	if (!(fatdir.attr & FAT_ATTR_DIRECTORY)) {
 		XPRINTF("E: directory not found! \n");
 		return -ENOENT;
 	}
+    
+    XPRINTF("directory=%s name=%s cluster=%d \n", path, lname, startCluster);
+    
+    if (fatdir.attr & FAT_ATTR_READONLY)
+        return -EACCES;
 
 	//delete direntries and modify fat
 	directoryCluster = startCluster;

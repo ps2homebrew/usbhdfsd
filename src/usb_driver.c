@@ -528,7 +528,7 @@ mass_dev* mass_stor_findDevice(int devId, int create)
             XPRINTF("usb_mass: mass_stor_findDevice exists %i\n", i);
             return &g_mass_device[i];
         }
-        else if (create && g_mass_device[i].devId == -1)
+        else if (create && dev == NULL && g_mass_device[i].devId == -1)
         {
             dev = &g_mass_device[i];
         }
@@ -771,6 +771,7 @@ int mass_stor_disconnect(int devId) {
 		mass_stor_release(dev);
 		fat_disconnect(dev);
 		scache_kill(dev->cache);
+		dev->cache = NULL;
 		dev->devId = -1;
 	}
 	return 0;

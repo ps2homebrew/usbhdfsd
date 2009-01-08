@@ -102,10 +102,14 @@ int InitFS()
 
 void fillStat(fio_stat_t *stat, fat_dir *fatdir)
 {
+	stat->mode = FIO_SO_IROTH | FIO_SO_IXOTH;
 	if (fatdir->attr & FAT_ATTR_DIRECTORY) {
 		stat->mode |= FIO_SO_IFDIR;
 	} else {
 		stat->mode |= FIO_SO_IFREG;
+	}
+	if (!(fatdir->attr & FAT_ATTR_READONLY)) {
+		stat->mode |= FIO_SO_IWOTH;
 	}
 
 	stat->size = fatdir->size;
@@ -318,10 +322,10 @@ int fs_close(iop_file_t* fd) {
 
 	fat_mountCheck();
 
+	rec->file_flag = -1;
+
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
-
-	rec->file_flag = -1;
 
 	if ((rec->mode & O_WRONLY)) {
 		//update direntry size and time
@@ -377,7 +381,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 {
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
-	int updateClusterIndices;
+	int updateClusterIndices = 0;
 
     _fs_lock();
 
@@ -386,7 +390,15 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
-	updateClusterIndices = 0;
+	if (rec->file_flag != 1) {
+		_fs_unlock();
+		return -EACCES;
+	}
+
+	if (!(rec->mode & O_WRONLY)) {
+		_fs_unlock();
+		return -EACCES;
+	}
 
 	if (size <= 0) { _fs_unlock(); return 0; }
 
@@ -419,8 +431,18 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
+	if (rec->file_flag != 1) {
+		_fs_unlock();
+		return -EACCES;
+	}
+
+	if (!(rec->mode & O_RDONLY)) {
+		_fs_unlock();
+		return -EACCES;
+	}
+
 	if (size<=0) {
-	    _fs_unlock();
+		_fs_unlock();
 		return 0;
 	}
 
@@ -559,7 +581,7 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 //---------------------------------------------------------------------------
 int fs_dopen  (iop_file_t *fd, const char *name)
 {
-	int ret, is_root = 0;
+	int is_root = 0;
 	fs_dir* rec;
 
 	_fs_lock();
@@ -582,19 +604,17 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 	memset(fd->privdata, 0, sizeof(fs_dir)); //NB: also implies "file_flag = 0;"
 	rec = (fs_dir *) fd->privdata;
 
-	ret = fat_getFirstDirentry(fatd, (char*)name, &rec->fatdlist, &rec->fatdir);
+	rec->status = fat_getFirstDirentry(fatd, (char*)name, &rec->fatdlist, &rec->fatdir);
 
-	if (ret < 1)
-	{
-		// root directory may have no entries, nothing else may.
-		if(!is_root) { free(fd->privdata); _fs_unlock(); return(-1); }
+	// root directory may have no entries, nothing else may.
+	if(rec->status == 0 && !is_root)
+		rec->status = -EFAULT;
 
-		// cause "dread" to return "no entries" immediately since dir is empty.
-		rec->status = 1;
-	}
+	if (rec->status < 0)
+		free(fd->privdata);
 
 	_fs_unlock();
-	return 1;
+	return rec->status;
 }
 
 //---------------------------------------------------------------------------
@@ -610,7 +630,7 @@ int fs_dclose (iop_file_t *fd)
 //---------------------------------------------------------------------------
 int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 {
-	int notgood;
+	int ret;
 	fs_dir* rec = (fs_dir *) fd->privdata;
 
 
@@ -623,28 +643,24 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
-	do {
-		if (rec->status)
-		{
-			_fs_unlock();
-			return 0;
-		}
+    while (rec->status > 0
+        && (rec->fatdir.attr & FAT_ATTR_VOLUME_LABEL
+            || ((rec->fatdir.attr & (FAT_ATTR_HIDDEN | FAT_ATTR_SYSTEM)) == (FAT_ATTR_HIDDEN | FAT_ATTR_SYSTEM))))
+        rec->status = fat_getNextDirentry(fatd, &rec->fatdlist, &rec->fatdir);
 
-		notgood = 0;
-
+    ret = rec->status;
+	if (rec->status >= 0)
+    {
 		memset(buffer, 0, sizeof(fio_dirent_t));
-		if (rec->fatdir.attr & FAT_ATTR_VOLUME_LABEL) {	 /* volume name */
-			notgood = 1;
-		}
 		fillStat(&buffer->stat, &rec->fatdir);
 		strcpy(buffer->name, (const char*) rec->fatdir.name);
+    }
 
-		if (fat_getNextDirentry(fatd, &rec->fatdlist, &rec->fatdir)<1)
-			rec->status = 1;	/* no more entries */
-	} while (notgood);
-
-	_fs_unlock();
-	return 1;
+	if (rec->status > 0)
+		rec->status = fat_getNextDirentry(fatd, &rec->fatdlist, &rec->fatdir);
+    
+    _fs_unlock();
+    return ret;
 }
 
 //---------------------------------------------------------------------------

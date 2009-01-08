@@ -28,8 +28,9 @@
 #define DIR_CHAIN_SIZE 32
 
 //attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
-//#define FAT_ATTR_READONLY     0x01
-//#define FAT_ATTR_HIDDEN       0x02
+#define FAT_ATTR_READONLY     0x01
+#define FAT_ATTR_HIDDEN       0x02
+#define FAT_ATTR_SYSTEM       0x04
 #define FAT_ATTR_VOLUME_LABEL 0x08
 #define FAT_ATTR_DIRECTORY    0x10
 #define FAT_ATTR_ARCHIVE      0x20

@@ -206,7 +206,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
 				if (ret < 0) {
 					printf("FAT driver:Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
-					return -1;
+					return -EIO;
 				}
 				lastFatSector = fatSector;
 
@@ -216,7 +216,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 					ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
 					if (ret < 0) {
 						printf("FAT driver:Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
-						return -1;
+						return -EIO;
 					}
 					xbuf[2] = sbuf[0];
 					xbuf[3] = sbuf[1];
@@ -267,7 +267,7 @@ int fat_getClusterChain16(fat_driver* fatd, unsigned int cluster, unsigned int* 
 				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
 				if (ret < 0) {
 					printf("FAT driver:Read fat16 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
-					return -1;
+					return -EIO;
 				}
 
 				lastFatSector = fatSector;
@@ -312,7 +312,7 @@ int fat_getClusterChain32(fat_driver* fatd, unsigned int cluster, unsigned int* 
 				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
 				if (ret < 0) {
 					printf("FAT driver: Read fat32 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
-					return -1;
+					return -EIO;
 				}
 
 				lastFatSector = fatSector;
@@ -368,7 +368,7 @@ int fat_getPartitionTable(mass_dev* dev, fat_part* part)
     if ( ret < 0 )
     {
         printf ( "FAT driver: Read sector 0 failed!\n" );
-        return -1;
+        return -EIO;
     }
 
     /* read 4 partition records */
@@ -425,7 +425,7 @@ void fat_determineFatType(fat_bpb* partBpb) {
 }
 
 //---------------------------------------------------------------------------
-void fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* partBpb) {
+int fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* partBpb) {
 	fat_raw_bpb* bpb_raw; //fat16, fat12
 	fat32_raw_bpb* bpb32_raw; //fat32
 	int ret;
@@ -435,7 +435,7 @@ void fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* p
 
 	if (ret < 0) {
 		printf("FAT driver: Read partition boot sector failed sector=%i! \n", part_rec->start);
-		return;
+		return -EIO;
 	}
 
 	bpb_raw = (fat_raw_bpb*) sbuf;
@@ -481,6 +481,7 @@ void fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* p
 		}
 		partBpb->fatId[ret] = 0;
 	}
+    return 1;
 }
 
 //---------------------------------------------------------------------------
@@ -726,7 +727,7 @@ int fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsi
 		*dirSector = chainSize * fatd->partBpb.clusterSize;
 	} else {
 		printf("FAT driver: Error getting cluster chain! startCluster=%i \n", *startCluster);
-		return -1;
+		return -EFAULT;
 	}
 
 	return chainSize;
@@ -752,7 +753,9 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 	dir.sname[0] = 0;
 	dir.name[0] = 0;
 
-	fat_getDirentrySectorData(fatd, startCluster, &startSector, &dirSector);
+	ret = fat_getDirentrySectorData(fatd, startCluster, &startSector, &dirSector);
+    if (ret < 0)
+        return ret;
 
 	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
@@ -769,7 +772,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
 			printf("FAT driver: read directory sector failed ! sector=%i\n", startSector + i);
-			return -1;
+			return -EIO;
 		}
 		XPRINTF("read sector ok, scanning sector for direntries...\n");
 		dirPos = 0;
@@ -823,7 +826,7 @@ int fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* s
 	*startCluster = 0;
 	if (fatDir != NULL) {
 		memset(fatDir, 0, sizeof(fat_dir));
-		fatDir->attr |= FAT_ATTR_DIRECTORY;
+		fatDir->attr = FAT_ATTR_DIRECTORY;
 	}
 	if (fname[i] == '/') {
 		i++;
@@ -849,7 +852,7 @@ int fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* s
 		//if the last char of the name was slash - the name was already found -exit
 		if (offset == 0) {
 			XPRINTF("Exiting from fat_getFileStartCluster with a folder\n");
-			return 1;
+			return 2;
 		}
 		ret = fat_getDirentryStartCluster(fatd, tmpName, startCluster, fatDir);
 		if (ret < 0) {
@@ -1047,7 +1050,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 
 	//the getFirst function was not called
 	if (fatdlist->direntryCluster == 0xFFFFFFFF || fatDir == NULL) {
-		return -2;
+		return -EFAULT;
 	}
 
 	dirCluster = fatdlist->direntryCluster;
@@ -1056,7 +1059,9 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 	dir.sname[0] = 0;
 	dir.name[0] = 0;
 
-	fat_getDirentrySectorData(fatd, &dirCluster, &startSector, &dirSector);
+	ret = fat_getDirentrySectorData(fatd, &dirCluster, &startSector, &dirSector);
+    if (ret < 0)
+        return ret;
 
 	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", dirCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
@@ -1078,7 +1083,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
 			printf("Read directory  sector failed ! sector=%i\n", startSector + i);
-			return -3;
+			return -EIO;
 		}
 
 		// go through sector from current pos till its end
@@ -1089,6 +1094,18 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 			fatdlist->direntryIndex++; //Note current entry processed
 			if (cont == 1) { //when short file name entry detected
 				fat_setFatDir(fatd, fatDir, dsfn, &dir, 0);
+#if 0
+                printf("fat_getNextDirentry %c%c%c%c%c%c %x %s %s\n",
+                    (dir.attr & FAT_ATTR_VOLUME_LABEL) ? 'v' : '-',
+                    (dir.attr & FAT_ATTR_DIRECTORY) ? 'd' : '-',
+                    (dir.attr & FAT_ATTR_READONLY) ? 'r' : '-',
+                    (dir.attr & FAT_ATTR_ARCHIVE) ? 'a' : '-',
+                    (dir.attr & FAT_ATTR_SYSTEM) ? 's' : '-',
+                    (dir.attr & FAT_ATTR_HIDDEN) ? 'h' : '-',
+                    dir.attr,
+                    dir.sname,
+                    dir.name);
+#endif
 				return 1;
 			}
 			dirPos += 32; //directory entry of size 32 bytes
@@ -1097,7 +1114,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 	}//ends "for"
 	// when we get this far - reset the direntry cluster
 	fatdlist->direntryCluster = 0xFFFFFFFF; //no more files
-	return -1; //indicate that no direntry is avalable
+	return 0; //indicate that no direntry is avalable
 }
 
 //---------------------------------------------------------------------------
@@ -1107,11 +1124,11 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlis
 
 	ret = fat_getFileStartCluster(fatd, dirName, &startCluster, fatDir);
 	if (ret < 0) { //dir name not found
-		return -4;
+		return -ENOENT;
 	}
 	//check that direntry is directory
-	if ((fatDir->attr & FAT_ATTR_DIRECTORY) == 0) {
-		return -3; //it's a file - exit
+	if (!(fatDir->attr & FAT_ATTR_DIRECTORY)) {
+		return -ENOTDIR; //it's a file - exit
 	}
 	fatdlist->direntryCluster = startCluster;
 	fatdlist->direntryIndex = 0;
@@ -1150,7 +1167,7 @@ int fat_readSector(fat_driver* fatd, unsigned int sector, unsigned char** buf)
 	ret = READ_SECTOR(fatd->dev, sector, sbuf);
 	if (ret < 0) {
 		printf("Read sector failed ! sector=%i\n", sector);
-		return -1;
+		return -EIO;
 	}
 	*buf = sbuf;
 	return mass_device->sectorSize;
