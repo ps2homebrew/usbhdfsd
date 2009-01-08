@@ -71,7 +71,7 @@ int InitFS()
 {
 	fs_driver.name = "mass";
 	fs_driver.type = IOP_DT_FS;
-	fs_driver.version = 1;
+	fs_driver.version = 2;
 	fs_driver.desc = "Usb mass storage driver";
 	fs_driver.ops = &fs_functarray;
 

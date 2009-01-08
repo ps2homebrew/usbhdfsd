@@ -860,16 +860,16 @@ int mass_stor_warmup(mass_dev *dev) {
 //                return(-1);
             }
 
-        	printf("Sense Data:\n");
-        	printf("error code: %02X\n", sd->error_code);
-        	printf("sense key:  %02X\n", sd->sense_key);
+        	XPRINTF("Sense Data:\n");
+        	XPRINTF("error code: %02X\n", sd->error_code);
+        	XPRINTF("sense key:  %02X\n", sd->sense_key);
 
-        	printf("information: %02X, %02X, %02X, %02X\n", sd->information[0], sd->information[1], sd->information[2], sd->information[3]);
+        	XPRINTF("information: %02X, %02X, %02X, %02X\n", sd->information[0], sd->information[1], sd->information[2], sd->information[3]);
 
-        	printf("add sense len:  %02X\n", sd->add_sense_len);
+        	XPRINTF("add sense len:  %02X\n", sd->add_sense_len);
 
-        	printf("add sense code:  %02X\n", sd->add_sense_code);
-        	printf("add sense qual:  %02X\n", sd->add_sense_qual);
+        	XPRINTF("add sense code:  %02X\n", sd->add_sense_code);
+        	XPRINTF("add sense qual:  %02X\n", sd->add_sense_qual);
 
 //        	return(-1);
         }

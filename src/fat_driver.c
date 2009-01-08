@@ -75,46 +75,6 @@ int strEqual(unsigned char *s1, unsigned char* s2) {
     }
 }
 
-fat_driver* fat_findData(mass_dev* dev, int create)
-{
-	int i;
-	fat_driver* empty = NULL;
-	XPRINTF("usb_mass: fat_findData devId %i\n", dev->devId);
-	for (i = 0; i < NUM_DEVICES; ++i)
-	{
-		if (g_fatd[i] == NULL)
-		{
-			if (create)
-			{
-				if (empty != NULL)
-					return empty;
-				else
-				{
-					g_fatd[i] = malloc(sizeof(fat_driver));
-					if (g_fatd[i] != NULL)
-					{
-						g_fatd[i]->dev = NULL;
-					}
-					return g_fatd[i];
-				}
-			}
-			else
-				return NULL;
-		}
-		else if (g_fatd[i]->dev == dev)
-		{
-			XPRINTF("usb_mass: fat_findData exists %i\n", i);
-			return g_fatd[i];
-		}
-		else if (g_fatd[i]->dev == NULL)
-		{
-			if (empty == NULL)
-				empty = g_fatd[i];
-		}
-	}
-	return NULL;
-}
-
 //---------------------------------------------------------------------------
 inline unsigned int fat_cluster2sector1216(fat_bpb* partBpb, unsigned int cluster)
 {
@@ -362,8 +322,6 @@ int fat_getPartitionTable(mass_dev* dev, fat_part* part)
     int              ret;
 	unsigned char* sbuf = NULL; //sector buffer
 
-    int workPartition = -1;
-
     ret = READ_SECTOR(dev, 0, sbuf);  // read sector 0 - Disk MBR or boot sector
     if ( ret < 0 )
     {
@@ -377,28 +335,8 @@ int fat_getPartitionTable(mass_dev* dev, fat_part* part)
         part_raw = ( part_raw_record* )(  sbuf + 0x01BE + ( i * 16 )  );
 
         fat_getPartitionRecord ( part_raw, &part -> record[ i ] );
-
-        if(
-            part -> record[ i ].sid == 6    ||
-            part -> record[ i ].sid == 4    ||
-            part -> record[ i ].sid == 1    ||  // fat 16, fat 12
-            part -> record[ i ].sid == 0x0B ||
-            part -> record[ i ].sid == 0x0C ||  // fat 32
-            part -> record[ i ].sid == 0x0E)    // fat 16 LBA
-        {
-            workPartition = i;
-        }
-
-        if ( workPartition == -1 )
-        {  // no partition table detected
-            // try to use "floppy" option
-            workPartition = 0;
-            part -> record[ 0 ].sid   =
-            part -> record[ 0 ].start = 0;
-            part -> record[ 0 ].count = dev->maxLBA;
-        }
     }
-    return workPartition;
+    return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -978,7 +916,6 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 }
 
 //---------------------------------------------------------------------------
-//---------------------------------------------------------------------------
 void fat_mountCheck()
 {
 	mass_stor_configureDevices();
@@ -987,35 +924,41 @@ void fat_mountCheck()
 //---------------------------------------------------------------------------
 int fat_connect(mass_dev* dev)
 {
-	XPRINTF("usb fat: connect devId %i \n", dev->devId);
+    int count = 0;
+    int i;
+	printf("usb fat: connect devId %i \n", dev->devId);
 
 	fat_part partTable;
-	int workPartition = fat_getPartitionTable(dev, &partTable);
-	if (workPartition >= 0)
-	{
-		fat_driver* fatd = fat_findData(dev, 1);
+	if (fat_getPartitionTable(dev, &partTable) < 0)
+        return -1;
+        
+    for ( i = 0; i < 4; i++)
+    {
+        if(
+            partTable.record[ i ].sid == 6    ||
+            partTable.record[ i ].sid == 4    ||
+            partTable.record[ i ].sid == 1    ||  // fat 16, fat 12
+            partTable.record[ i ].sid == 0x0B ||
+            partTable.record[ i ].sid == 0x0C ||  // fat 32
+            partTable.record[ i ].sid == 0x0E)    // fat 16 LBA
+        {
+            printf("usb_mass: mount partition %d\n", i);
+            if (fat_mount(dev, &partTable.record[i]) >= 0)
+                count++;
+        }
+    }
 
-		if (fatd == NULL)
-		{
-		printf("usb fat: unable to allocate drive!\n");
-			return -1;
-		}
-
-		if (fatd->dev != NULL)
-		{
-			printf("usb fat: mount ERROR: alread mounted\n");
-			fat_forceUnmount(fatd);
-		}
-
-		fat_getPartitionBootSector(dev, &partTable.record[workPartition], &fatd->partBpb);
-
-		fatd->dev = dev;
-		fatd->deIdx = 0;
-		fatd->clStackIndex = 0;
-		fatd->clStackLast = 0;
-		fatd->lastChainCluster = 0xFFFFFFFF;
-		fatd->lastChainResult = -1;
-	}
+    if ( count == 0 )
+    {  // no partition table detected
+        // try to use "floppy" option
+        printf("usb_mass: mount drive\n");
+        part_record rec;
+        rec.sid   =
+        rec.start = 0;
+        rec.count = dev->maxLBA;
+        if (fat_mount(dev, &rec) < 0)
+            return -1;
+    }
 
 	return 0;
 }
@@ -1023,12 +966,13 @@ int fat_connect(mass_dev* dev)
 //---------------------------------------------------------------------------
 int fat_disconnect(mass_dev* dev)
 {
-	XPRINTF("usb fat: disconnect devId %i \n", dev->devId);
-	fat_driver* fatd = fat_findData(dev, 0);
+	printf("usb fat: disconnect devId %i \n", dev->devId);
 
-	if (fatd != NULL)
+	int i;
+	for (i = 0; i < NUM_DEVICES; ++i)
 	{
-		fat_forceUnmount(fatd);
+		if (g_fatd[i] != NULL && g_fatd[i]->dev == dev)
+			fat_forceUnmount(g_fatd[i]);
 	}
 
 	return 0;
@@ -1133,6 +1077,53 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlis
 	fatdlist->direntryCluster = startCluster;
 	fatdlist->direntryIndex = 0;
 	return fat_getNextDirentry(fatd, fatdlist, fatDir);
+}
+
+//---------------------------------------------------------------------------
+int fat_mount(mass_dev* dev, part_record* rec)
+{
+	fat_driver* fatd = NULL;
+	int i;
+	for (i = 0; i < NUM_DEVICES && fatd == NULL; ++i)
+	{
+		if (g_fatd[i] == NULL)
+		{
+			XPRINTF("usb fat: allocate fat_driver %d!\n", sizeof(fat_driver));
+			g_fatd[i] = malloc(sizeof(fat_driver));
+			if (g_fatd[i] != NULL)
+			{
+				g_fatd[i]->dev = NULL;
+			}
+			fatd = g_fatd[i];
+		}
+		else if(g_fatd[i]->dev == NULL)
+		{
+			fatd = g_fatd[i];
+		}
+	}
+
+	if (fatd == NULL)
+	{
+		printf("usb fat: unable to allocate drive!\n");
+		return -1;
+	}
+
+	if (fatd->dev != NULL)
+	{
+		printf("usb fat: mount ERROR: alread mounted\n");
+		fat_forceUnmount(fatd);
+	}
+
+	if (fat_getPartitionBootSector(dev, rec, &fatd->partBpb) < 0)
+		return -1;
+
+	fatd->dev = dev;
+	fatd->deIdx = 0;
+	fatd->clStackIndex = 0;
+	fatd->clStackLast = 0;
+	fatd->lastChainCluster = 0xFFFFFFFF;
+	fatd->lastChainResult = -1;
+	return 0;
 }
 
 //---------------------------------------------------------------------------
