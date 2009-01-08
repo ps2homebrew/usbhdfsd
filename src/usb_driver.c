@@ -21,6 +21,28 @@
 
 #define getBI32(__buf) ((((u8 *) (__buf))[3] << 0) | (((u8 *) (__buf))[2] << 8) | (((u8 *) (__buf))[1] << 16) | (((u8 *) (__buf))[0] << 24))
 
+#define USB_SUBCLASS_MASS_RBC		0x01
+#define USB_SUBCLASS_MASS_ATAPI		0x02
+#define USB_SUBCLASS_MASS_QIC		0x03
+#define USB_SUBCLASS_MASS_UFI		0x04
+#define USB_SUBCLASS_MASS_SFF_8070I 	0x05
+#define USB_SUBCLASS_MASS_SCSI		0x06
+
+#define USB_PROTOCOL_MASS_CBI		0x00
+#define USB_PROTOCOL_MASS_CBI_NO_CCI	0x01
+#define USB_PROTOCOL_MASS_BULK_ONLY	0x50
+
+#define TAG_TEST_UNIT_READY     0
+#define TAG_REQUEST_SENSE	3
+#define TAG_INQUIRY		18
+#define TAG_READ_CAPACITY       37
+#define TAG_READ		40
+#define TAG_START_STOP_UNIT	33
+#define TAG_WRITE		42
+
+#define DEVICE_DETECTED		1
+#define DEVICE_CONFIGURED	2
+
 int fat_connect(mass_dev* dev);
 int fat_disconnect(mass_dev* dev);
 
@@ -68,6 +90,7 @@ typedef struct _usb_callback_data {
 
 static int residue;
 
+#define NUM_DEVICES 5
 static mass_dev g_mass_device[NUM_DEVICES];
 
 

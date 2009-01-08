@@ -1967,8 +1967,10 @@ int fat_deleteFile(fat_driver* fatd, const char* fname, char directory) {
     
     XPRINTF("directory=%s name=%s cluster=%d \n", path, lname, startCluster);
     
-    if (fatdir.attr & FAT_ATTR_READONLY)
-        return -EACCES;
+    if (fatdir.attr & FAT_ATTR_READONLY) {
+		XPRINTF("E: directory read only! \n");
+		return -EACCES;
+	}
 
 	//delete direntries and modify fat
 	directoryCluster = startCluster;

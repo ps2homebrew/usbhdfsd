@@ -27,14 +27,15 @@
 #define READ_SECTOR(d, a, b)	scache_readSector((d)->cache, (a), (void **)&b)
 //#define FLUSH_SECTORS		scache_flushSectors
 
-static fat_driver* g_fatd[NUM_DEVICES];
+#define NUM_DRIVES 10
+static fat_driver* g_fatd[NUM_DRIVES];
 
 //---------------------------------------------------------------------------
 int InitFAT()
 {
     int i;
 	int ret = 0;
-    for (i = 0; i < NUM_DEVICES; ++i)
+    for (i = 0; i < NUM_DRIVES; ++i)
         g_fatd[i] = NULL;
     return ret;
 }
@@ -741,7 +742,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 		}//ends "while"
 	}//ends "for"
 	XPRINTF("direntry %s not found! \n", dirName);
-	return -EFAULT;
+	return -ENOENT;
 }
 
 //---------------------------------------------------------------------------
@@ -969,7 +970,7 @@ int fat_disconnect(mass_dev* dev)
 	printf("usb fat: disconnect devId %i \n", dev->devId);
 
 	int i;
-	for (i = 0; i < NUM_DEVICES; ++i)
+	for (i = 0; i < NUM_DRIVES; ++i)
 	{
 		if (g_fatd[i] != NULL && g_fatd[i]->dev == dev)
 			fat_forceUnmount(g_fatd[i]);
@@ -1084,7 +1085,7 @@ int fat_mount(mass_dev* dev, part_record* rec)
 {
 	fat_driver* fatd = NULL;
 	int i;
-	for (i = 0; i < NUM_DEVICES && fatd == NULL; ++i)
+	for (i = 0; i < NUM_DRIVES && fatd == NULL; ++i)
 	{
 		if (g_fatd[i] == NULL)
 		{
@@ -1138,7 +1139,7 @@ void fat_forceUnmount(fat_driver* fatd) //dlanor: added for disconnection events
 //---------------------------------------------------------------------------
 fat_driver * fat_getData(int device)
 {
-    if (device >= NUM_DEVICES)
+    if (device >= NUM_DRIVES)
         return NULL;
 
     fat_driver* fatd = g_fatd[device];

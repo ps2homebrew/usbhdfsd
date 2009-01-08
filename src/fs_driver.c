@@ -17,6 +17,8 @@
 #include <sysclib.h>
 #include <thsemap.h>
 #include <sys/stat.h>
+#include <io_common.h>
+#include <ioman.h>
 
 #include <thbase.h>
 #include <errno.h>
@@ -65,40 +67,6 @@ fs_rec  fsRec[MAX_FILES]; //file info record
 
 static iop_device_t fs_driver;
 static iop_device_ops_t fs_functarray;
-
-/* init file system driver */
-int InitFS()
-{
-	fs_driver.name = "mass";
-	fs_driver.type = IOP_DT_FS;
-	fs_driver.version = 2;
-	fs_driver.desc = "Usb mass storage driver";
-	fs_driver.ops = &fs_functarray;
-
-	fs_functarray.init    = fs_init;
-	fs_functarray.deinit  = fs_deinit;
-	fs_functarray.format  = fs_format;
-	fs_functarray.open    = fs_open;
-	fs_functarray.close   = fs_close;
-	fs_functarray.read    = fs_read;
-	fs_functarray.write   = fs_write;
-	fs_functarray.lseek   = fs_lseek;
-	fs_functarray.ioctl   = fs_ioctl;
-	fs_functarray.remove  = fs_remove;
-	fs_functarray.mkdir   = fs_mkdir;
-	fs_functarray.rmdir   = fs_rmdir;
-	fs_functarray.dopen   = fs_dopen;
-	fs_functarray.dclose  = fs_dclose;
-	fs_functarray.dread   = fs_dread;
-	fs_functarray.getstat = fs_getstat;
-	fs_functarray.chstat  = fs_chstat;
-
-	DelDrv("mass");
-	AddDrv(&fs_driver);
-
-	// should return an error code if AddDrv fails...
-	return(0);
-}
 
 void fillStat(fio_stat_t *stat, fat_dir *fatdir)
 {
@@ -217,6 +185,12 @@ void fs_reset(void)
 
 //---------------------------------------------------------------------------
 int fs_inited = 0;
+
+//---------------------------------------------------------------------------
+int fs_dummy(void)
+{
+	return -5;
+}
 
 //---------------------------------------------------------------------------
 int fs_init(iop_device_t *driver)
@@ -735,10 +709,38 @@ int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 	return ret;
 }
 
-//---------------------------------------------------------------------------
-int fs_dummy(void)
+/* init file system driver */
+int InitFS()
 {
-	return -5;
+	fs_driver.name = "mass";
+	fs_driver.type = IOP_DT_FS;
+	fs_driver.version = 2;
+	fs_driver.desc = "Usb mass storage driver";
+	fs_driver.ops = &fs_functarray;
+
+	fs_functarray.init    = fs_init;
+	fs_functarray.deinit  = fs_deinit;
+	fs_functarray.format  = fs_format;
+	fs_functarray.open    = fs_open;
+	fs_functarray.close   = fs_close;
+	fs_functarray.read    = fs_read;
+	fs_functarray.write   = fs_write;
+	fs_functarray.lseek   = fs_lseek;
+	fs_functarray.ioctl   = fs_ioctl;
+	fs_functarray.remove  = fs_remove;
+	fs_functarray.mkdir   = fs_mkdir;
+	fs_functarray.rmdir   = fs_rmdir;
+	fs_functarray.dopen   = fs_dopen;
+	fs_functarray.dclose  = fs_dclose;
+	fs_functarray.dread   = fs_dread;
+	fs_functarray.getstat = fs_getstat;
+	fs_functarray.chstat  = fs_chstat;
+
+	DelDrv("mass");
+	AddDrv(&fs_driver);
+
+	// should return an error code if AddDrv fails...
+	return(0);
 }
 //---------------------------------------------------------------------------
 //End of file:  fs_driver.c
