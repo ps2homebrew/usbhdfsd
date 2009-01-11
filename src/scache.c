@@ -272,7 +272,7 @@ int scache_writeSector(cache_set* cache, unsigned int sector) {
 	cache->rec[index].tax += 2;
 
 	//set dirty status
-	cache->rec[index].writeDirty++;
+	cache->rec[index].writeDirty = 1;
 	cache->writeFlag++;
 
 	XPRINTF("cache: done soft writing sector \n");
