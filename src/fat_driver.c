@@ -14,6 +14,7 @@
 #include "usbhd_common.h"
 #include "scache.h"
 #include "fat_driver.h"
+#include "fat.h"
 //#include "fat_write.h"
 #include "mass_stor.h"
 
@@ -364,16 +365,16 @@ void fat_determineFatType(fat_bpb* partBpb) {
 }
 
 //---------------------------------------------------------------------------
-int fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* partBpb) {
+int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* partBpb) {
 	fat_raw_bpb* bpb_raw; //fat16, fat12
 	fat32_raw_bpb* bpb32_raw; //fat32
 	int ret;
 	unsigned char* sbuf = NULL; //sector buffer
 
-	ret = READ_SECTOR(dev, part_rec->start, sbuf); //read partition boot sector (first sector on partition)
+	ret = READ_SECTOR(dev, sector, sbuf); //read partition boot sector (first sector on partition)
 
 	if (ret < 0) {
-		printf("FAT driver: Read partition boot sector failed sector=%i! \n", part_rec->start);
+		printf("FAT driver: Read partition boot sector failed sector=%i! \n", sector);
 		return -EIO;
 	}
 
@@ -394,8 +395,8 @@ int fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* pa
 	if (partBpb->sectorCount == 0) {
 		partBpb->sectorCount = getI32(bpb_raw->sectorCount); // large partition
 	}
-	partBpb->partStart = part_rec->start;
-	partBpb->rootDirStart = part_rec->start + (partBpb->fatCount * partBpb->fatSize) + partBpb->resSectors;
+	partBpb->partStart = sector;
+	partBpb->rootDirStart = partBpb->partStart + (partBpb->fatCount * partBpb->fatSize) + partBpb->resSectors;
 	for (ret = 0; ret < 8; ret++) {
 		partBpb->fatId[ret] = bpb_raw->fatId[ret];
 	}
@@ -413,7 +414,7 @@ int fat_getPartitionBootSector(mass_dev* dev, part_record* part_rec, fat_bpb* pa
 		} else {
 			partBpb->activeFat = 0;
 		}
-		partBpb->rootDirStart = part_rec->start + (partBpb->fatCount * partBpb->fatSize) + partBpb->resSectors;
+		partBpb->rootDirStart = partBpb->partStart + (partBpb->fatCount * partBpb->fatSize) + partBpb->resSectors;
 		partBpb->rootDirCluster = getI32(bpb32_raw->rootDirCluster);
 		for (ret = 0; ret < 8; ret++) {
 			partBpb->fatId[ret] = bpb32_raw->fatId[ret];
@@ -917,12 +918,6 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 }
 
 //---------------------------------------------------------------------------
-void fat_mountCheck()
-{
-	mass_stor_configureDevices();
-}
-
-//---------------------------------------------------------------------------
 int fat_connect(mass_dev* dev)
 {
     int count = 0;
@@ -944,7 +939,7 @@ int fat_connect(mass_dev* dev)
             partTable.record[ i ].sid == 0x0E)    // fat 16 LBA
         {
             printf("usb_mass: mount partition %d\n", i);
-            if (fat_mount(dev, &partTable.record[i]) >= 0)
+            if (fat_mount(dev, partTable.record[i].start, partTable.record[i].count) >= 0)
                 count++;
         }
     }
@@ -953,11 +948,7 @@ int fat_connect(mass_dev* dev)
     {  // no partition table detected
         // try to use "floppy" option
         printf("usb_mass: mount drive\n");
-        part_record rec;
-        rec.sid   =
-        rec.start = 0;
-        rec.count = dev->maxLBA;
-        if (fat_mount(dev, &rec) < 0)
+        if (fat_mount(dev, 0, dev->maxLBA) < 0)
             return -1;
     }
 
@@ -1081,7 +1072,7 @@ int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlis
 }
 
 //---------------------------------------------------------------------------
-int fat_mount(mass_dev* dev, part_record* rec)
+int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 {
 	fat_driver* fatd = NULL;
 	int i;
@@ -1115,7 +1106,7 @@ int fat_mount(mass_dev* dev, part_record* rec)
 		fat_forceUnmount(fatd);
 	}
 
-	if (fat_getPartitionBootSector(dev, rec, &fatd->partBpb) < 0)
+	if (fat_getPartitionBootSector(dev, start, &fatd->partBpb) < 0)
 		return -1;
 
 	fatd->dev = dev;
@@ -1142,11 +1133,16 @@ fat_driver * fat_getData(int device)
     if (device >= NUM_DRIVES)
         return NULL;
 
-    fat_driver* fatd = g_fatd[device];
-    if (fatd == NULL || fatd->dev == NULL)
+    while (g_fatd[device] == NULL || g_fatd[device]->dev == NULL)
+    {
+        if (mass_stor_configureNextDevice() <= 0)
+            break;
+    }
+    
+    if (g_fatd[device] == NULL || g_fatd[device]->dev == NULL)
         return NULL;
     else
-        return fatd;
+        return g_fatd[device];
 }
 
 //---------------------------------------------------------------------------

@@ -1,8 +1,6 @@
 #ifndef _FAT_WRITE_H
 #define _FAT_WRITE_H 1
 
-#include "fat.h"
-
 unsigned char toUpperChar(unsigned char c);
 int fat_createFile(fat_driver* fatd, const char* fname, char directory, char escapeNotExist, unsigned int* cluster, unsigned int* sfnSector, int* sfnOffset);
 int fat_deleteFile(fat_driver* fatd, const char* fname, char directory);

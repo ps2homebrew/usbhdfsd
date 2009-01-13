@@ -20,12 +20,12 @@ struct _mass_dev
 	cache_set* cache;
 };
 
-int InitUSB();
+int InitUSB(void);
 int mass_stor_disconnect(int devId);
 int mass_stor_connect(int devId);
 int mass_stor_probe(int devId);
 int mass_stor_readSector(mass_dev* mass_device, unsigned int sector, unsigned char* buffer, int size);
 int mass_stor_writeSector(mass_dev* mass_device, unsigned int sector, unsigned char* buffer, int size);
-void mass_stor_configureDevices();
+int mass_stor_configureNextDevice(void);
 
 #endif

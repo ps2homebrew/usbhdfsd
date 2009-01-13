@@ -951,7 +951,7 @@ int mass_stor_warmup(mass_dev *dev) {
 
 }
 
-void mass_stor_configureDevices()
+int mass_stor_configureNextDevice()
 {
 	int i;
 
@@ -959,6 +959,7 @@ void mass_stor_configureDevices()
     i = 10000;
     while (wait_for_connect && (--i > 0))
         DelayThread(100);
+    wait_for_connect = 0;
 
 	XPRINTF("mass_stor: configuring devices... \n");
 
@@ -977,18 +978,19 @@ void mass_stor_configureDevices()
             {
                 printf("mass_stor: failed to warmup device %d\n", dev->devId);
                 mass_stor_release(dev);
-                break;
+                continue;
             }
 
             dev->cache = scache_init(dev, dev->sectorSize); // modified by Hermes
             if (dev->cache == NULL) {
                 printf ("mass_stor: scache_init failed \n" );
-                break;
+                continue;
             }
 
-            fat_connect(dev);
+            return fat_connect(dev) >= 0;
         }
     }
+    return 0;
 }
 
 int InitUSB()

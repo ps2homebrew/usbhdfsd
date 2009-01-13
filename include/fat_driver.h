@@ -1,7 +1,36 @@
 #ifndef _FAT_DRIVER_H
 #define _FAT_DRIVER_H 1
 
-#include "fat.h"
+#define DIR_CHAIN_SIZE 32
+
+#define FAT_MAX_NAME 128
+
+//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
+#define FAT_ATTR_READONLY     0x01
+#define FAT_ATTR_HIDDEN       0x02
+#define FAT_ATTR_SYSTEM       0x04
+#define FAT_ATTR_VOLUME_LABEL 0x08
+#define FAT_ATTR_DIRECTORY    0x10
+#define FAT_ATTR_ARCHIVE      0x20
+
+typedef struct _fat_bpb {
+	unsigned int  sectorSize;	//bytes per sector - should be 512
+	unsigned char clusterSize;	//sectors per cluster - power of two
+	unsigned int  resSectors;	//reserved sectors - typically 1 (boot sector)
+	unsigned char fatCount;		//number of FATs - must be 2
+	unsigned int  rootSize;		//number of rootdirectory entries - typically 512
+	unsigned int  fatSize;		//sectors per FAT - varies
+	unsigned int  trackSize;	//sectors per track
+	unsigned int  headCount;	//number of heads
+	unsigned int  hiddenCount;	//number of hidden sectors 
+	unsigned int  sectorCount;	//number of sectors
+	unsigned int  partStart;	//sector where partition starts (boot sector)
+	unsigned int  rootDirStart;	//sector where root directory starts
+	unsigned int  rootDirCluster;	//fat32 - cluster of the root directory
+	unsigned int  activeFat;	//fat32 - current active fat number
+	unsigned char fatType;		//12-FAT16, 16-FAT16, 32-FAT32
+	unsigned char fatId[9];		//File system ID. "FAT12", "FAT16" or "FAT  " - for debug only
+} fat_bpb;
 
 typedef struct _fat_driver {
 	mass_dev* dev;
@@ -39,8 +68,28 @@ typedef struct _fat_dir_list {
 	int direntryIndex; //index of the directory children
 } fat_dir_list;
 
-void fat_mountCheck(void);
-int fat_mount(mass_dev* dev, part_record* rec);
+typedef struct _fat_dir_chain_record {
+	unsigned int cluster;
+	unsigned int index;
+} fat_dir_chain_record;
+
+typedef struct _fat_dir {
+	unsigned char attr;		//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
+	unsigned char name[FAT_MAX_NAME];
+	unsigned char cdate[4];	//D:M:Yl:Yh
+	unsigned char ctime[3]; //H:M:S
+	unsigned char adate[4];	//D:M:Yl:Yh
+	unsigned char atime[3]; //H:M:S
+	unsigned char mdate[4];	//D:M:Yl:Yh
+	unsigned char mtime[3]; //H:M:S
+	unsigned int  size;		//file size, 0 for directory
+	unsigned int  lastCluster;
+	fat_dir_chain_record  chain[DIR_CHAIN_SIZE];  //cluser/offset cache - for seeking purpose
+} fat_dir;
+
+int strEqual(unsigned char *s1, unsigned char* s2);
+
+int fat_mount(mass_dev* dev, unsigned int start, unsigned int count);
 void fat_forceUnmount(fat_driver* fatd); //dlanor: added for disconnection events (flush impossible)
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
 int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size);
@@ -49,11 +98,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 
 fat_driver * fat_getData(int device);
 int      fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir);
-int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
-int      fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
 int      fat_getClusterChain(fat_driver* fatd, unsigned int cluster, unsigned int* buf, int bufSize, int start);
-void     fat_invalidateLastChainResult(fat_driver* fatd);
-void     fat_getClusterAtFilePos(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned int* cluster, unsigned int* clusterPos);
 
 #endif
 

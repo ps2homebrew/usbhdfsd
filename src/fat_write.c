@@ -19,8 +19,8 @@
 #include <errno.h>
 
 #include "usbhd_common.h"
-#include "fat.h"
 #include "fat_driver.h"
+#include "fat.h"
 #include "scache.h"
 #include "mass_stor.h"
 
@@ -1569,7 +1569,7 @@ int fat_modifyDirSpace(fat_driver* fatd, unsigned char* lname, char directory, c
 	//get new cluster for file/directory
 	newCluster = fat_getFreeCluster(fatd, 0);
 	if (newCluster == 0) {
-		return -EFAULT;
+		return -ENOSPC;
 	}
 	XPRINTF("I: new file/dir cluster=%d\n", newCluster);
 

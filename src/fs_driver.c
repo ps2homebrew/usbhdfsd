@@ -215,8 +215,6 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	XPRINTF("fs_open called: %s mode=%X \n", name, mode) ;
 
-	fat_mountCheck();
-
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
@@ -294,8 +292,6 @@ int fs_close(iop_file_t* fd) {
 
     _fs_lock();
 
-	fat_mountCheck();
-
 	rec->file_flag = -1;
 
 	fat_driver* fatd = fat_getData(fd->unit);
@@ -319,8 +315,6 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
 
     _fs_lock();
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -358,8 +352,6 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 	int updateClusterIndices = 0;
 
     _fs_lock();
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -399,8 +391,6 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 	int result;
 
     _fs_lock();
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -462,8 +452,6 @@ int fs_remove (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-	fat_mountCheck();
-
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL)
     {
@@ -505,8 +493,6 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-	fat_mountCheck();
-
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
@@ -541,8 +527,6 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-	fat_mountCheck();
-
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
@@ -561,8 +545,6 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 	_fs_lock();
     
     XPRINTF("fs_dopen called: unit %d name %s\n", fd->unit, name);
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -612,8 +594,6 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
     
     XPRINTF("fs_dread called: unit %d\n", fd->unit);
 
-	fat_mountCheck();
-
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
@@ -645,8 +625,6 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 	fat_dir fatdir;
 
 	_fs_lock();
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -688,8 +666,6 @@ int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 {
     int ret;
 	_fs_lock();
-
-	fat_mountCheck();
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }

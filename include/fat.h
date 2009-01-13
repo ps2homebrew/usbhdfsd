@@ -23,17 +23,6 @@
 
 
 #define FAT_MAX_PATH 1024
-#define FAT_MAX_NAME 128
-
-#define DIR_CHAIN_SIZE 32
-
-//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
-#define FAT_ATTR_READONLY     0x01
-#define FAT_ATTR_HIDDEN       0x02
-#define FAT_ATTR_SYSTEM       0x04
-#define FAT_ATTR_VOLUME_LABEL 0x08
-#define FAT_ATTR_DIRECTORY    0x10
-#define FAT_ATTR_ARCHIVE      0x20
 
 typedef struct _part_raw_record {
 	unsigned char	active;		//Set to 80h if this partition is active / bootable
@@ -130,26 +119,6 @@ typedef struct _fat32_raw_bpb {
 
 } fat32_raw_bpb;
 
-typedef struct _fat_bpb {
-	unsigned int  sectorSize;	//bytes per sector - should be 512
-	unsigned char clusterSize;	//sectors per cluster - power of two
-	unsigned int  resSectors;	//reserved sectors - typically 1 (boot sector)
-	unsigned char fatCount;		//number of FATs - must be 2
-	unsigned int  rootSize;		//number of rootdirectory entries - typically 512
-	unsigned int  fatSize;		//sectors per FAT - varies
-	unsigned int  trackSize;	//sectors per track
-	unsigned int  headCount;	//number of heads
-	unsigned int  hiddenCount;	//number of hidden sectors 
-	unsigned int  sectorCount;	//number of sectors
-	unsigned int  partStart;	//sector where partition starts (boot sector)
-	unsigned int  rootDirStart;	//sector where root directory starts
-	unsigned int  rootDirCluster;	//fat32 - cluster of the root directory
-	unsigned int  activeFat;	//fat32 - current active fat number
-	unsigned char fatType;		//12-FAT16, 16-FAT16, 32-FAT32
-	unsigned char fatId[9];		//File system ID. "FAT12", "FAT16" or "FAT  " - for debug only
-} fat_bpb;
-
-
 /* directory entry of the short file name */
 typedef struct _fat_direntry_sfn {
 	unsigned char name[8];		//Filename padded with spaces if required.
@@ -197,25 +166,6 @@ typedef struct _fat_direntry {
 } fat_direntry;
 
 
-typedef struct _fat_dir_chain_record {
-	unsigned int cluster;
-	unsigned int index;
-} fat_dir_chain_record;
-
-typedef struct _fat_dir {
-	unsigned char attr;		//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
-	unsigned char name[FAT_MAX_NAME];
-	unsigned char cdate[4];	//D:M:Yl:Yh
-	unsigned char ctime[3]; //H:M:S
-	unsigned char adate[4];	//D:M:Yl:Yh
-	unsigned char atime[3]; //H:M:S
-	unsigned char mdate[4];	//D:M:Yl:Yh
-	unsigned char mtime[3]; //H:M:S
-	unsigned int  size;		//file size, 0 for directory
-	unsigned int  lastCluster;
-	fat_dir_chain_record  chain[DIR_CHAIN_SIZE];  //cluser/offset cache - for seeking purpose
-} fat_dir;
-
 typedef struct _fat_dir_record { // 140 bytes
 	unsigned char attr;		//attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
 	unsigned char name[FAT_MAX_NAME];
@@ -227,8 +177,12 @@ typedef struct _fat_dir_record { // 140 bytes
 int getI32(unsigned char* buf);
 int getI32_2(unsigned char* buf1, unsigned char* buf2);
 int getI16(unsigned char* buf);
-int strEqual(unsigned char *s1, unsigned char* s2);
+
 unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
 unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster);
+int      fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
+int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
+void     fat_invalidateLastChainResult(fat_driver* fatd);
+void     fat_getClusterAtFilePos(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned int* cluster, unsigned int* clusterPos);
 
 #endif /* _FAT_H */
