@@ -626,6 +626,8 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 
 	_fs_lock();
 
+    XPRINTF("fs_getstat called: unit %d name %s\n", fd->unit, name);
+
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 

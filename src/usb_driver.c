@@ -80,7 +80,7 @@ typedef struct _sense_data {
 
 static UsbDriver driver;
 
-volatile int wait_for_connect = 1;
+//volatile int wait_for_connect = 1;
 
 typedef struct _usb_callback_data {
     int semh;
@@ -111,7 +111,7 @@ inline void cbw_scsi_test_unit_ready(cbw_packet* packet)
 	packet->tag = TAG_TEST_UNIT_READY;
 	packet->dataTransferLength = 0;		//TUR_REPLY_LENGTH
 	packet->flags = 0x80;			//data will flow In
-	packet->comLength = 6;			//short inquiry command
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x00;		//TUR operation code
@@ -119,7 +119,13 @@ inline void cbw_scsi_test_unit_ready(cbw_packet* packet)
 	packet->comData[2] = 0;			//reserved
 	packet->comData[3] = 0;			//reserved
 	packet->comData[4] = 0;			//reserved
-	packet->comData[5] = 0;			//control
+	packet->comData[5] = 0;			//reserved
+	packet->comData[6] = 0;			//reserved
+	packet->comData[7] = 0;			//reserved
+	packet->comData[8] = 0;			//reserved
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_request_sense(cbw_packet* packet)
@@ -127,7 +133,7 @@ inline void cbw_scsi_request_sense(cbw_packet* packet)
 	packet->tag = - TAG_REQUEST_SENSE;
 	packet->dataTransferLength = 18	;	//REQUEST_SENSE_REPLY_LENGTH
 	packet->flags = 0x80;			//sense data will flow In
-	packet->comLength = 6;			//scsi command of size 6
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x03;		//request sense operation code
@@ -135,8 +141,13 @@ inline void cbw_scsi_request_sense(cbw_packet* packet)
 	packet->comData[2] = 0;			//reserved
 	packet->comData[3] = 0;			//reserved
 	packet->comData[4] = 18;		//allocation length
-	packet->comData[5] = 0;			//Control
-
+	packet->comData[5] = 0;			//reserved
+	packet->comData[6] = 0;			//reserved
+	packet->comData[7] = 0;			//reserved
+	packet->comData[8] = 0;			//reserved
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_inquiry(cbw_packet* packet)
@@ -144,7 +155,7 @@ inline void cbw_scsi_inquiry(cbw_packet* packet)
 	packet->tag = - TAG_INQUIRY;
 	packet->dataTransferLength = 36;	//INQUIRY_REPLY_LENGTH
 	packet->flags = 0x80;			//inquiry data will flow In
-	packet->comLength = 6;			//short inquiry command
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x12;		//inquiry operation code
@@ -152,7 +163,13 @@ inline void cbw_scsi_inquiry(cbw_packet* packet)
 	packet->comData[2] = 0;			//page code
 	packet->comData[3] = 0;			//reserved
 	packet->comData[4] = 36;		//inquiry reply length
-	packet->comData[5] = 0;			//reserved/flag/link/
+	packet->comData[5] = 0;			//reserved
+	packet->comData[6] = 0;			//reserved
+	packet->comData[7] = 0;			//reserved
+	packet->comData[8] = 0;			//reserved
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_start_stop_unit(cbw_packet* packet)
@@ -160,7 +177,7 @@ inline void cbw_scsi_start_stop_unit(cbw_packet* packet)
 	packet->tag = - TAG_START_STOP_UNIT;
 	packet->dataTransferLength = 0;	//START_STOP_REPLY_LENGTH
 	packet->flags = 0x80;			//inquiry data will flow In
-	packet->comLength = 6;			//short SCSI command
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x1B;		//start stop unit operation code
@@ -168,7 +185,13 @@ inline void cbw_scsi_start_stop_unit(cbw_packet* packet)
 	packet->comData[2] = 0;			//reserved
 	packet->comData[3] = 0;			//reserved
 	packet->comData[4] = 1;			//reserved/LoEj/Start "Start the media and acquire the format type"
-	packet->comData[5] = 0;			//control
+	packet->comData[5] = 0;			//reserved
+	packet->comData[6] = 0;			//reserved
+	packet->comData[7] = 0;			//reserved
+	packet->comData[8] = 0;			//reserved
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_read_capacity(cbw_packet* packet)
@@ -176,7 +199,7 @@ inline void cbw_scsi_read_capacity(cbw_packet* packet)
 	packet->tag = - TAG_READ_CAPACITY;
 	packet->dataTransferLength = 8	;	//READ_CAPACITY_REPLY_LENGTH
 	packet->flags = 0x80;			//inquiry data will flow In
-	packet->comLength = 10;			//scsi command of size 10
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x25;		//read capacity operation code
@@ -187,9 +210,10 @@ inline void cbw_scsi_read_capacity(cbw_packet* packet)
 	packet->comData[5] = 0;			//LBA 4
 	packet->comData[6] = 0;			//Reserved
 	packet->comData[7] = 0;			//Reserved
-	packet->comData[8] = 0;			//Reserved
-	packet->comData[9] = 0;			//Control
-
+	packet->comData[8] = 0;			//Reserved/PMI
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_read_sector(cbw_packet* packet, int lba, int sectorSize, int sectorCount)
@@ -197,7 +221,7 @@ inline void cbw_scsi_read_sector(cbw_packet* packet, int lba, int sectorSize, in
 	packet->tag = - TAG_READ;
 	packet->dataTransferLength = sectorSize	 * sectorCount;
 	packet->flags = 0x80;			//read data will flow In
-	packet->comLength = 10;			//scsi command of size 10
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x28;		//read operation code
@@ -209,7 +233,9 @@ inline void cbw_scsi_read_sector(cbw_packet* packet, int lba, int sectorSize, in
 	packet->comData[6] = 0;			//Reserved
 	packet->comData[7] = (sectorCount & 0xFF00) >> 8;	//Transfer length MSB
 	packet->comData[8] = (sectorCount & 0xFF);			//Transfer length LSB
-	packet->comData[9] = 0;			//control
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 inline void cbw_scsi_write_sector(cbw_packet* packet, int lba, int sectorSize, int sectorCount)
@@ -217,7 +243,7 @@ inline void cbw_scsi_write_sector(cbw_packet* packet, int lba, int sectorSize, i
 	packet->tag = -TAG_WRITE;
 	packet->dataTransferLength = sectorSize	 * sectorCount;
 	packet->flags = 0x00;			//write data will flow Out
-	packet->comLength = 10;			//scsi command of size 10
+	packet->comLength = 12;
 
 	//scsi command packet
 	packet->comData[0] = 0x2A;		//WRITE(10) operation code
@@ -229,7 +255,9 @@ inline void cbw_scsi_write_sector(cbw_packet* packet, int lba, int sectorSize, i
 	packet->comData[6] = 0;			//Reserved
 	packet->comData[7] = (sectorCount & 0xFF00) >> 8;	//Transfer length MSB
 	packet->comData[8] = (sectorCount & 0xFF);			//Transfer length LSB
-	packet->comData[9] = 0;			//control
+	packet->comData[9] = 0;			//reserved
+	packet->comData[10] = 0;		//reserved
+	packet->comData[11] = 0;		//reserved
 }
 
 void usb_callback(int resultCode, int bytes, void *arg)
@@ -414,6 +442,7 @@ int usb_bulk_status(mass_dev* dev, csw_packet* csw, int tag) {
 	s.attr = 0;
 	cb_data.semh = CreateSema(&s);
 
+    XPRINTF("Usb: bulk csw.status residue: %i\n", residue);
 	initCSWPacket(csw);
 	csw->tag = tag;
 	csw->dataResidue = residue;
@@ -694,7 +723,7 @@ int mass_stor_connect(int devId)
 	UsbEndpointDescriptor *endpoint;
 	mass_dev* dev;
 
-	wait_for_connect = 0;
+	//wait_for_connect = 0;
 
 	printf ("usb_mass: connect: devId=%i\n", devId);
 	dev = mass_stor_findDevice(devId, 1);
@@ -835,6 +864,10 @@ int mass_stor_warmup(mass_dev *dev) {
 		return -ENODEV;
 	}
 
+	printf("USB Vendor: %s\n", buffer + 8);
+	printf("USB Product: %s\n", buffer + 16);
+	printf("USB Revision: %s\n", buffer + 32);
+
     ready = 0;
     while(!ready)
     {
@@ -956,10 +989,10 @@ int mass_stor_configureNextDevice()
 	int i;
 
     // give the USB driver some time to detect the device
-    i = 10000;
-    while (wait_for_connect && (--i > 0))
-        DelayThread(100);
-    wait_for_connect = 0;
+    //i = 10000;
+    //while (wait_for_connect && (--i > 0))
+        //DelayThread(100);
+    //wait_for_connect = 0;
 
 	XPRINTF("mass_stor: configuring devices... \n");
 

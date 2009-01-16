@@ -3,7 +3,7 @@
  */
 
 #define MAJOR_VER 1
-#define MINOR_VER 2
+#define MINOR_VER 3
 
 #include <loadcore.h>
 #include <stdio.h>
