@@ -1160,7 +1160,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 		while (cont &&  (dirPos < fatd->partBpb.sectorSize) && (j < DIR_MASK_SIZE)) {
 			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
 			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(dsfn, dlfn, &dir); //get single directory entry from sector buffer
+			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get single directory entry from sector buffer
 			mask_ix = j>>3;
 			mask_sh = j&7;
 			switch (cont) {

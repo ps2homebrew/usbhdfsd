@@ -432,7 +432,7 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
  2 - long name dir entry found
  3 - deleted dir entry found
 */
-int fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir ) {
+int fat_getDirentry(unsigned char fatType, fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir ) {
 	int i, j;
 	int offset;
 	int cont;
@@ -518,7 +518,10 @@ int fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry
 		}
 		dir->attr = dsfn->attr;
 		dir->size = getI32(dsfn->size);
-		dir->cluster = getI32_2(dsfn->clusterL, dsfn->clusterH);
+        if (fatType == FAT32)
+            dir->cluster = getI32_2(dsfn->clusterL, dsfn->clusterH);
+        else
+            dir->cluster = getI16(dsfn->clusterL);
 		return 1;
 	}
 
@@ -721,7 +724,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 		while (cont &&  dirPos < fatd->partBpb.sectorSize) {
 			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
 			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(dsfn, dlfn, &dir); //get single directory entry from sector buffer
+			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get single directory entry from sector buffer
 			if (cont == 1) { //when short file name entry detected
 				if (!(dir.attr & FAT_ATTR_VOLUME_LABEL)) { //not volume label
 					if ((strEqual(dir.sname, dirName) == 0) ||
@@ -1026,7 +1029,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 		while (cont &&  (dirPos < fatd->partBpb.sectorSize)) {
 			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
 			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(dsfn, dlfn, &dir); //get a directory entry from sector
+			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get a directory entry from sector
 			fatdlist->direntryIndex++; //Note current entry processed
 			if (cont == 1) { //when short file name entry detected
 				fat_setFatDir(fatd, fatDir, dsfn, &dir, 0);

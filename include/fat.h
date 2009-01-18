@@ -180,7 +180,7 @@ int getI16(unsigned char* buf);
 
 unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
 unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster);
-int      fat_getDirentry(fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
+int      fat_getDirentry(unsigned char fatType, fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
 int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
 void     fat_invalidateLastChainResult(fat_driver* fatd);
 void     fat_getClusterAtFilePos(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned int* cluster, unsigned int* clusterPos);

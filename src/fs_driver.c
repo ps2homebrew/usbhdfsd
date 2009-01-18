@@ -259,14 +259,14 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 	cluster = 0; //allways start from root
 	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
 	ret = fat_getFileStartCluster(fatd, name, &cluster, &rec->fatdir);
+	if (ret < 0) {
+	    _fs_unlock(); 
+		return ret;
+	}
 	if ((rec->fatdir.attr & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY) {
 		// Can't open a directory with fioOpen
 		_fs_unlock();
 		return -EISDIR;
-	}
-	if (ret < 0) {
-	    _fs_unlock(); 
-		return ret;
 	}
 
 	rec->file_flag = 1;

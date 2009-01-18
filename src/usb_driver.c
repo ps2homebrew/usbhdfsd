@@ -606,6 +606,8 @@ int mass_stor_readSector(mass_dev* mass_device, unsigned int sector, unsigned ch
 
 		XPRINTF("-READ SECTOR DATA\n");
 		stat = usb_bulk_transfer(mass_device->bulkEpI, buffer, size); //Modified by Hermes
+        if (stat > 0)
+            printf("usbhdfsd: mass_stor_readSector error form usb_bulk_transfer %d\n", stat);
 
        	XPRINTF("-READ SECTOR STATUS\n");
 		stat = usb_bulk_manage_status(mass_device, -TAG_READ);
@@ -631,6 +633,8 @@ int mass_stor_writeSector(mass_dev* mass_device, unsigned int sector, unsigned c
 
 		XPRINTF("-WRITE SECTOR DATA\n");
 		stat = usb_bulk_transfer(mass_device->bulkEpO, buffer, size);
+        if (stat > 0)
+            printf("usbhdfsd: mass_stor_writeSector error form usb_bulk_transfer %d\n", stat);
 
        	XPRINTF("-READ SECTOR STATUS\n");
 		stat = usb_bulk_manage_status(mass_device, -TAG_WRITE);
