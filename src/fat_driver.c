@@ -42,24 +42,6 @@ int InitFAT()
 }
 
 //---------------------------------------------------------------------------
-int getI32(unsigned char* buf)
-{
-	return (buf[0]  + (buf[1] <<8) + (buf[2] << 16) + (buf[3] << 24));
-}
-
-//---------------------------------------------------------------------------
-int getI32_2(unsigned char* buf1, unsigned char* buf2)
-{
-	return (buf1[0]  + (buf1[1] <<8) + (buf2[0] << 16) + (buf2[1] << 24));
-}
-
-//---------------------------------------------------------------------------
-int getI16(unsigned char* buf)
-{
-	return (buf[0] + (buf[1] <<8) );
-}
-
-//---------------------------------------------------------------------------
 int strEqual(unsigned char *s1, unsigned char* s2) {
     unsigned char u1, u2;
     for (;;) {
@@ -98,14 +80,6 @@ inline unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster)
 		case FAT32: return fat_cluster2sector32(partBpb, cluster);
 		default:    return fat_cluster2sector1216(partBpb, cluster);
 	}
-}
-
-//---------------------------------------------------------------------------
-inline void fat_getPartitionRecord(part_raw_record* raw, part_record* rec)
-{
-	rec->sid = raw->sid;
-	rec->start = getI32(raw->startLBA);
-	rec->count = getI32(raw->size);
 }
 
 /*
@@ -314,31 +288,6 @@ int fat_getClusterChain(fat_driver* fatd, unsigned int cluster, unsigned int* bu
 void fat_invalidateLastChainResult(fat_driver* fatd)
 {
 	fatd->lastChainCluster  = 0;
-}
-
-//---------------------------------------------------------------------------
-int fat_getPartitionTable(mass_dev* dev, fat_part* part)
-{
-    part_raw_record* part_raw;
-    int              i;
-    int              ret;
-	unsigned char* sbuf = NULL; //sector buffer
-
-    ret = READ_SECTOR(dev, 0, sbuf);  // read sector 0 - Disk MBR or boot sector
-    if ( ret < 0 )
-    {
-        printf ( "FAT driver: Read sector 0 failed!\n" );
-        return -EIO;
-    }
-
-    /* read 4 partition records */
-    for ( i = 0; i < 4; i++)
-    {
-        part_raw = ( part_raw_record* )(  sbuf + 0x01BE + ( i * 16 )  );
-
-        fat_getPartitionRecord ( part_raw, &part -> record[ i ] );
-    }
-    return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -921,59 +870,6 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 }
 
 //---------------------------------------------------------------------------
-int fat_connect(mass_dev* dev)
-{
-    int count = 0;
-    int i;
-	printf("usb fat: connect devId %i \n", dev->devId);
-
-	fat_part partTable;
-	if (fat_getPartitionTable(dev, &partTable) < 0)
-        return -1;
-        
-    for ( i = 0; i < 4; i++)
-    {
-        if(
-            partTable.record[ i ].sid == 6    ||
-            partTable.record[ i ].sid == 4    ||
-            partTable.record[ i ].sid == 1    ||  // fat 16, fat 12
-            partTable.record[ i ].sid == 0x0B ||
-            partTable.record[ i ].sid == 0x0C ||  // fat 32
-            partTable.record[ i ].sid == 0x0E)    // fat 16 LBA
-        {
-            printf("usb_mass: mount partition %d\n", i);
-            if (fat_mount(dev, partTable.record[i].start, partTable.record[i].count) >= 0)
-                count++;
-        }
-    }
-
-    if ( count == 0 )
-    {  // no partition table detected
-        // try to use "floppy" option
-        printf("usb_mass: mount drive\n");
-        if (fat_mount(dev, 0, dev->maxLBA) < 0)
-            return -1;
-    }
-
-	return 0;
-}
-
-//---------------------------------------------------------------------------
-int fat_disconnect(mass_dev* dev)
-{
-	printf("usb fat: disconnect devId %i \n", dev->devId);
-
-	int i;
-	for (i = 0; i < NUM_DRIVES; ++i)
-	{
-		if (g_fatd[i] != NULL && g_fatd[i]->dev == dev)
-			fat_forceUnmount(g_fatd[i]);
-	}
-
-	return 0;
-}
-
-//---------------------------------------------------------------------------
 int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir) {
 	fat_direntry_sfn* dsfn;
 	fat_direntry_lfn* dlfn;
@@ -1106,7 +1002,7 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 	if (fatd->dev != NULL)
 	{
 		printf("usb fat: mount ERROR: alread mounted\n");
-		fat_forceUnmount(fatd);
+		fat_forceUnmount(fatd->dev);
 	}
 
 	if (fat_getPartitionBootSector(dev, start, &fatd->partBpb) < 0)
@@ -1122,11 +1018,15 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 }
 
 //---------------------------------------------------------------------------
-void fat_forceUnmount(fat_driver* fatd) //dlanor: added for disconnection events (flush impossible)
+void fat_forceUnmount(mass_dev* dev)
 {
-	XPRINTF("usb fat: forceUnmount devId %i \n", fatd->dev->devId);
-	if(fatd->dev != NULL) {
-		fatd->dev = NULL;
+	XPRINTF("usb fat: forceUnmount devId %i \n", dev->devId);
+
+	int i;
+	for (i = 0; i < NUM_DRIVES; ++i)
+	{
+		if (g_fatd[i] != NULL && g_fatd[i]->dev == dev)
+			g_fatd[i] = NULL;
 	}
 }
 

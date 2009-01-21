@@ -15,6 +15,7 @@
 #include "usbhd_common.h"
 #include "mass_stor.h"
 #include "scache.h"
+#include "part_driver.h"
 
 #define getBI32(__buf) ((((u8 *) (__buf))[3] << 0) | (((u8 *) (__buf))[2] << 8) | (((u8 *) (__buf))[1] << 16) | (((u8 *) (__buf))[0] << 24))
 
@@ -39,9 +40,6 @@
 
 #define DEVICE_DETECTED		1
 #define DEVICE_CONFIGURED	2
-
-int fat_connect(mass_dev* dev);
-int fat_disconnect(mass_dev* dev);
 
 #define CBW_TAG 0x43425355
 #define CSW_TAG 0x53425355
@@ -865,7 +863,7 @@ int mass_stor_disconnect(int devId) {
 	if ((dev->status & DEVICE_DETECTED) && devId == dev->devId)
 	{
 		mass_stor_release(dev);
-		fat_disconnect(dev);
+		part_disconnect(dev);
 		scache_kill(dev->cache);
 		dev->cache = NULL;
 		dev->devId = -1;
@@ -997,7 +995,7 @@ int mass_stor_configureNextDevice()
                 continue;
             }
 
-            return fat_connect(dev) >= 0;
+            return part_connect(dev) >= 0;
         }
     }
     return 0;
