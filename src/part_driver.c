@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "usbhd_common.h"
+#include "scache.h"
 #include "part_driver.h"
 #include "mass_stor.h"
 #include "fat_driver.h"
@@ -11,6 +12,8 @@
 //#define DEBUG  //comment out this line when not debugging
 
 #include "mass_debug.h"
+
+#define READ_SECTOR(d, a, b)	scache_readSector((d)->cache, (a), (void **)&b)
 
 typedef struct _part_record {
     unsigned char sid;          //system id - 4=16bit FAT (16bit sector numbers)
@@ -49,15 +52,16 @@ int part_getPartitionTable(mass_dev* dev, part_table* part)
     part_raw_record* part_raw;
     int              i;
     int              ret;
-    unsigned char sbuf[512];
+    unsigned char* sbuf;
 
-    ret = mass_stor_readSector(dev, 0, sbuf, sizeof(sbuf));  // read sector 0 - Disk MBR or boot sector
+    ret = READ_SECTOR(dev, 0, sbuf);  // read sector 0 - Disk MBR or boot sector
     if ( ret < 0 )
     {
         printf("USBHDFSD: part_getPartitionTable read failed %d!\n", ret);
         return -1;
     }
 
+    printf("USBHDFSD: boot signature %X %X\n", sbuf[0x1FE], sbuf[0x1FF]);
     /* read 4 partition records */
     for ( i = 0; i < 4; i++)
     {
@@ -78,7 +82,7 @@ int part_connect(mass_dev* dev)
     part_table partTable;
     if (part_getPartitionTable(dev, &partTable) < 0)
         return -1;
-        
+    
     for ( i = 0; i < 4; i++)
     {
         if(
