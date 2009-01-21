@@ -955,6 +955,7 @@ int mass_stor_warmup(mass_dev *dev) {
 
 	dev->sectorSize = getBI32 ( &buffer[ 4 ] );
 	dev->maxLBA     = getBI32 ( &buffer[ 0 ] );
+	printf("USBHDFSD: sectorSize %d maxLBA %d\n", dev->sectorSize, dev->maxLBA);
 
 	return 0;
 }
