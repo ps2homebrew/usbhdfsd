@@ -93,7 +93,7 @@ int part_connect(mass_dev* dev)
             partTable.record[ i ].sid == 0x0C ||  // fat 32
             partTable.record[ i ].sid == 0x0E)    // fat 16 LBA
         {
-            printf("usb_mass: mount partition %d\n", i);
+            printf("USBHDFSD: mount partition %d\n", i);
             if (fat_mount(dev, partTable.record[i].start, partTable.record[i].count) >= 0)
                 count++;
         }
@@ -102,7 +102,7 @@ int part_connect(mass_dev* dev)
     if ( count == 0 )
     {  // no partition table detected
         // try to use "floppy" option
-        printf("usb_mass: mount drive\n");
+        printf("USBHDFSD: mount drive\n");
         if (fat_mount(dev, 0, dev->maxLBA) < 0)
             return -1;
     }

@@ -213,7 +213,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	_fs_lock();
 
-	XPRINTF("fs_open called: %s mode=%X \n", name, mode) ;
+	XPRINTF("USBHDFSD: fs_open called: %s mode=%X \n", name, mode) ;
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -237,7 +237,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 		escapeNotExist = 1;
 		if (mode & O_CREAT) {
-			XPRINTF("FAT I: O_CREAT detected!\n");
+			XPRINTF("USBHDFSD: FAT I: O_CREAT detected!\n");
 			escapeNotExist = 0;
 		}
 
@@ -250,14 +250,14 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 		}
 		//the file already exist but mode is set to truncate
 		if (ret == 2 && (mode & O_TRUNC)) {
-			XPRINTF("FAT I: O_TRUNC detected!\n");
+			XPRINTF("USBHDFSD: FAT I: O_TRUNC detected!\n");
 			fat_truncateFile(fatd, cluster, rec->sfnSector, rec->sfnOffset);
 		}
 	}
 
 	//find the file
 	cluster = 0; //allways start from root
-	XPRINTF("Calling fat_getFileStartCluster from fs_open\n");
+	XPRINTF("USBHDFSD: Calling fat_getFileStartCluster from fs_open\n");
 	ret = fat_getFileStartCluster(fatd, name, &cluster, &rec->fatdir);
 	if (ret < 0) {
 	    _fs_unlock(); 
@@ -275,7 +275,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 	rec->sizeChange  = 0;
 
 	if ((mode & O_APPEND) && (mode & O_WRONLY)) {
-		XPRINTF("FAT I: O_APPEND detected!\n");
+		XPRINTF("USBHDFSD: FAT I: O_APPEND detected!\n");
 		rec->filePos = rec->fatdir.size;
 	}
 
@@ -496,7 +496,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
-	XPRINTF("fs_mkdir: name=%s \n",name);
+	XPRINTF("USBHDFSD: fs_mkdir: name=%s \n",name);
 	//workaround for bug that invokes fioMkdir right after fioRemove
 	sig = getNameSignature(name);
 	millis = getMillis();
@@ -544,7 +544,7 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 
 	_fs_lock();
     
-    XPRINTF("fs_dopen called: unit %d name %s\n", fd->unit, name);
+    XPRINTF("USBHDFSD: fs_dopen called: unit %d name %s\n", fd->unit, name);
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -577,7 +577,7 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 int fs_dclose (iop_file_t *fd)
 {
 	_fs_lock();
-    XPRINTF("fs_dclose called: unit %d\n", fd->unit);
+    XPRINTF("USBHDFSD: fs_dclose called: unit %d\n", fd->unit);
 	free(fd->privdata);
 	_fs_unlock();
 	return 0;
@@ -592,7 +592,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 
 	_fs_lock();
     
-    XPRINTF("fs_dread called: unit %d\n", fd->unit);
+    XPRINTF("USBHDFSD: fs_dread called: unit %d\n", fd->unit);
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
@@ -626,12 +626,12 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 
 	_fs_lock();
 
-    XPRINTF("fs_getstat called: unit %d name %s\n", fd->unit, name);
+    XPRINTF("USBHDFSD: fs_getstat called: unit %d name %s\n", fd->unit, name);
 
 	fat_driver* fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
-	XPRINTF("Calling fat_getFileStartCluster from fs_getstat\n");
+	XPRINTF("USBHDFSD: Calling fat_getFileStartCluster from fs_getstat\n");
 	ret = fat_getFileStartCluster(fatd, name, &cluster, &fatdir);
 	if (ret < 0) {
 		_fs_unlock();

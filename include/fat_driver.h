@@ -22,7 +22,6 @@ typedef struct _fat_bpb {
 	unsigned int  fatSize;		//sectors per FAT - varies
 	unsigned int  trackSize;	//sectors per track
 	unsigned int  headCount;	//number of heads
-	unsigned int  hiddenCount;	//number of hidden sectors 
 	unsigned int  sectorCount;	//number of sectors
 	unsigned int  partStart;	//sector where partition starts (boot sector)
 	unsigned int  rootDirStart;	//sector where root directory starts
@@ -30,6 +29,7 @@ typedef struct _fat_bpb {
 	unsigned int  activeFat;	//fat32 - current active fat number
 	unsigned char fatType;		//12-FAT16, 16-FAT16, 32-FAT32
 	unsigned char fatId[9];		//File system ID. "FAT12", "FAT16" or "FAT  " - for debug only
+	unsigned int  dataStart;	//sector where data starts
 } fat_bpb;
 
 typedef struct _fat_driver {

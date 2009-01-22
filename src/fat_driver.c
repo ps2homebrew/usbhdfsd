@@ -59,29 +59,6 @@ int strEqual(unsigned char *s1, unsigned char* s2) {
     }
 }
 
-//---------------------------------------------------------------------------
-inline unsigned int fat_cluster2sector1216(fat_bpb* partBpb, unsigned int cluster)
-{
-	return  partBpb->rootDirStart + (partBpb->rootSize / (partBpb->sectorSize>>5))+ (partBpb->clusterSize * (cluster-2));
-                           //modified by Hermes    ^ this work :)
-}
-
-//---------------------------------------------------------------------------
-inline unsigned int fat_cluster2sector32(fat_bpb* partBpb, unsigned int cluster)
-{
-	return  partBpb->rootDirStart + (partBpb->clusterSize * (cluster-2));
-}
-
-//---------------------------------------------------------------------------
-inline unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster)
-{
-	switch(partBpb->fatType)
-	{
-		case FAT32: return fat_cluster2sector32(partBpb, cluster);
-		default:    return fat_cluster2sector1216(partBpb, cluster);
-	}
-}
-
 /*
 
    0x321, 0xABC
@@ -141,7 +118,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 		if (lastFatSector !=  fatSector || sectorSpan) {
 				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
 				if (ret < 0) {
-					printf("FAT driver:Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
+					printf("USBHDFSD: Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
 					return -EIO;
 				}
 				lastFatSector = fatSector;
@@ -151,7 +128,7 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 					xbuf[1] = sbuf[fatd->partBpb.sectorSize - 1];
 					ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
 					if (ret < 0) {
-						printf("FAT driver:Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
+						printf("USBHDFSD: Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
 						return -EIO;
 					}
 					xbuf[2] = sbuf[0];
@@ -164,16 +141,13 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 			cluster = fat_getClusterRecord12(sbuf + (recordOffset % fatd->partBpb.sectorSize), cluster % 2);
 		}
 
-		if (cluster >= 0xFF8) {
+		if ((cluster & 0xFFF) >= 0xFF8) {
 			cont = 0; //continue = false
 		} else {
-			buf[i] = cluster;
+			buf[i] = cluster & 0xFFF;
 			i++;
 		}
 	}
-
-	if (cont) { return 0; }
-
 	return i;
 }
 
@@ -200,27 +174,23 @@ int fat_getClusterChain16(fat_driver* fatd, unsigned int cluster, unsigned int* 
 	while(i < bufSize && cont) {
 		fatSector = cluster / indexCount;
 		if (lastFatSector !=  fatSector) {
-				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
-				if (ret < 0) {
-					printf("FAT driver:Read fat16 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
-					return -EIO;
-				}
+			ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
+			if (ret < 0) {
+				printf("USBHDFSD: Read fat16 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
+				return -EIO;
+			}
 
-				lastFatSector = fatSector;
+			lastFatSector = fatSector;
 		}
 		cluster = getI16(sbuf + ((cluster % indexCount) * 2));
-		if (cluster >= 0xFFF8) {
+		if ((cluster & 0xFFFF) >= 0xFFF8) {
 			cont = 0; //continue = false
 		} else {
-			buf[i] = cluster;
+			buf[i] = cluster & 0xFFFF;
 			i++;
 		}
 	}
-	if (cont) {
-		return 0;
-	} else {
-		return i;
-	}
+	return i;
 }
 
 //---------------------------------------------------------------------------
@@ -245,13 +215,13 @@ int fat_getClusterChain32(fat_driver* fatd, unsigned int cluster, unsigned int* 
 	while(i < bufSize && cont) {
 		fatSector = cluster / indexCount;
 		if (lastFatSector !=  fatSector) {
-				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
-				if (ret < 0) {
-					printf("FAT driver: Read fat32 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
-					return -EIO;
-				}
+			ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector,  sbuf);
+			if (ret < 0) {
+				printf("USBHDFSD: Read fat32 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
+				return -EIO;
+			}
 
-				lastFatSector = fatSector;
+			lastFatSector = fatSector;
 		}
 		cluster = getI32(sbuf + ((cluster % indexCount) * 4));
 		if ((cluster & 0xFFFFFFF) >= 0xFFFFFF8) {
@@ -261,11 +231,7 @@ int fat_getClusterChain32(fat_driver* fatd, unsigned int cluster, unsigned int* 
 			i++;
 		}
 	}
-	if (cont) {
-		return 0;
-	} else {
-		return i;
-	}
+	return i;
 }
 
 //---------------------------------------------------------------------------
@@ -301,7 +267,7 @@ void fat_determineFatType(fat_bpb* partBpb) {
 	sector -= partBpb->partStart;
 	sector = partBpb->sectorCount - sector;
 	clusterCount = sector / partBpb->clusterSize;
-	//printf("Data cluster count = %i \n", clusterCount);
+	//printf("USBHDFSD: Data cluster count = %i \n", clusterCount);
 
 	if (clusterCount < 4085) {
 		partBpb->fatType = FAT12;
@@ -321,9 +287,8 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
 	unsigned char* sbuf = NULL; //sector buffer
 
 	ret = READ_SECTOR(dev, sector, sbuf); //read partition boot sector (first sector on partition)
-
 	if (ret < 0) {
-		printf("FAT driver: Read partition boot sector failed sector=%i! \n", sector);
+		printf("USBHDFSD: Read partition boot sector failed sector=%i! \n", sector);
 		return -EIO;
 	}
 
@@ -339,7 +304,6 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
 	partBpb->fatSize = getI16(bpb_raw->fatSize);
 	partBpb->trackSize = getI16(bpb_raw->trackSize);
 	partBpb->headCount = getI16(bpb_raw->headCount);
-	partBpb->hiddenCount = getI32(bpb_raw->hiddenCountL);
 	partBpb->sectorCount = getI16(bpb_raw->sectorCountO);
 	if (partBpb->sectorCount == 0) {
 		partBpb->sectorCount = getI32(bpb_raw->sectorCount); // large partition
@@ -351,6 +315,7 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
 	}
 	partBpb->fatId[ret] = 0;
 	partBpb->rootDirCluster = 0;
+	partBpb->dataStart = partBpb->rootDirStart + (partBpb->rootSize / (partBpb->sectorSize >> 5));
 
 	fat_determineFatType(partBpb);
 
@@ -369,7 +334,9 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
 			partBpb->fatId[ret] = bpb32_raw->fatId[ret];
 		}
 		partBpb->fatId[ret] = 0;
+		partBpb->dataStart = partBpb->rootDirStart;
 	}
+    printf("USBHDFSD: Fat type %i Id %s \n", partBpb->fatType, partBpb->fatId);
     return 1;
 }
 
@@ -489,11 +456,11 @@ void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir) {
 	int blockSize;
 
 
-	XPRINTF("FAT driver: reading cluster chain  \n");
+	XPRINTF("USBHDFSD: reading cluster chain  \n");
 	fileCluster = fatDir->chain[0].cluster;
 
 	if (fileCluster < 2) {
-		XPRINTF("   early exit... \n");
+		XPRINTF("USBHDFSD:    early exit... \n");
 		return;
 	}
 
@@ -508,8 +475,7 @@ void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir) {
 
 	while (nextChain) {
 		chainSize = fat_getClusterChain(fatd, fileCluster, fatd->cbuf, MAX_DIR_CLUSTER, 1);
-		if (chainSize == 0) { //the chain is full, but more chain parts exist
-			chainSize = MAX_DIR_CLUSTER;
+		if (chainSize >= MAX_DIR_CLUSTER) { //the chain is full, but more chain parts exist
 			fileCluster = fatd->cbuf[MAX_DIR_CLUSTER - 1];
 		}else { //chain fits in the chain buffer completely - no next chain exist
 			nextChain = 0;
@@ -530,16 +496,16 @@ void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir) {
 
 #ifdef DEBUG_EXTREME //dlanor: I patched this because this bloat hid important stuff
 	//debug
-	printf("SEEK CLUSTER CHAIN CACHE fileSize=%i blockSize=%i \n", fatDir->size, blockSize);
+	printf("USBHDFSD: SEEK CLUSTER CHAIN CACHE fileSize=%i blockSize=%i \n", fatDir->size, blockSize);
 	for (i = 0; i < DIR_CHAIN_SIZE; i++) {
-		printf("index=%i cluster=%i offset= %i - %i start=%i \n",
+		printf("USBHDFSD: index=%i cluster=%i offset= %i - %i start=%i \n",
 			fatDir->chain[i].index, fatDir->chain[i].cluster,
 			fatDir->chain[i].index * fatd->partBpb.clusterSize * fatd->partBpb.sectorSize,
 			(fatDir->chain[i].index+1) * fatd->partBpb.clusterSize * fatd->partBpb.sectorSize,
 			i * blockSize);
 	}
 #endif /* debug */
-	XPRINTF("FAT driver: read cluster chain  done!\n");
+	XPRINTF("USBHDFSD: read cluster chain  done!\n");
 
 
 }
@@ -550,7 +516,7 @@ void fat_setFatDir(fat_driver* fatd, fat_dir* fatDir, fat_direntry_sfn* dsfn, fa
 	int i;
 	unsigned char* srcName;
 
-	XPRINTF("setting fat dir...\n");
+	XPRINTF("USBHDFSD: setting fat dir...\n");
 	srcName = dir->sname;
 	if (dir->name[0] != 0) { //long filename not empty
 		srcName = dir->name;
@@ -615,10 +581,13 @@ int fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsi
 	}
 	*startSector = fat_cluster2sector(&fatd->partBpb, *startCluster);
 	chainSize = fat_getClusterChain(fatd, *startCluster, fatd->cbuf, MAX_DIR_CLUSTER, 1);
-	if (chainSize > 0) {
+	if (chainSize >= MAX_DIR_CLUSTER) {
+		printf("USBHDFSD: Chain too large\n");
+		return -EFAULT;
+	} else if (chainSize > 0) {
 		*dirSector = chainSize * fatd->partBpb.clusterSize;
 	} else {
-		printf("FAT driver: Error getting cluster chain! startCluster=%i \n", *startCluster);
+		printf("USBHDFSD: Error getting cluster chain! startCluster=%i \n", *startCluster);
 		return -EFAULT;
 	}
 
@@ -639,8 +608,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 	mass_dev* mass_device = fatd->dev;
 
 	cont = 1;
-	XPRINTF("\n");
-	XPRINTF("getting cluster for dir entry: %s \n", dirName);
+	XPRINTF("USBHDFSD: getting cluster for dir entry: %s \n", dirName);
 	//clear name strings
 	dir.sname[0] = 0;
 	dir.name[0] = 0;
@@ -649,7 +617,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
     if (ret < 0)
         return ret;
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
+	XPRINTF("USBHDFSD: dirCluster=%i startSector=%i (%i) dirSector=%i \n", *startCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -663,10 +631,10 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 
 		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
-			printf("FAT driver: read directory sector failed ! sector=%i\n", startSector + i);
+			printf("USBHDFSD: read directory sector failed ! sector=%i\n", startSector + i);
 			return -EIO;
 		}
-		XPRINTF("read sector ok, scanning sector for direntries...\n");
+		XPRINTF("USBHDFSD: read sector ok, scanning sector for direntries...\n");
 		dirPos = 0;
 
 		// go through start of the sector till the end of sector
@@ -678,12 +646,12 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 				if (!(dir.attr & FAT_ATTR_VOLUME_LABEL)) { //not volume label
 					if ((strEqual(dir.sname, dirName) == 0) ||
 						(strEqual(dir.name, dirName) == 0) ) {
-							XPRINTF("found! %s\n", dir.name);
+							XPRINTF("USBHDFSD: found! %s\n", dir.name);
 							if (fatDir != NULL) { //fill the directory properties
 								fat_setFatDir(fatd, fatDir, dsfn, &dir, 1);
 							}
 							*startCluster = dir.cluster;
-							XPRINTF("direntry %s found at cluster: %i \n", dirName, dir.cluster);
+							XPRINTF("USBHDFSD: direntry %s found at cluster: %i \n", dirName, dir.cluster);
 							return dir.attr; //returns file or directory attr
 						}
 				}//ends "if(!(dir.attr & FAT_ATTR_VOLUME_LABEL))"
@@ -694,7 +662,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 			dirPos += 32; //directory entry of size 32 bytes
 		}//ends "while"
 	}//ends "for"
-	XPRINTF("direntry %s not found! \n", dirName);
+	XPRINTF("USBHDFSD: direntry %s not found! \n", dirName);
 	return -ENOENT;
 }
 
@@ -709,7 +677,7 @@ int fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* s
 	int cont;
 	int ret;
 
-	XPRINTF("Entering fat_getFileStartCluster\n");
+	XPRINTF("USBHDFSD: Entering fat_getFileStartCluster\n");
 
 	cont = 1;
 	offset = 0;
@@ -739,21 +707,21 @@ int fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* s
 	}//ends "for"
 	//and the final file
 	tmpName[offset] = 0; //terminate string
-	XPRINTF("Ready to get cluster for file \"%s\"\n", tmpName);
+	XPRINTF("USBHDFSD: Ready to get cluster for file \"%s\"\n", tmpName);
 	if (fatDir != NULL) {
 		//if the last char of the name was slash - the name was already found -exit
 		if (offset == 0) {
-			XPRINTF("Exiting from fat_getFileStartCluster with a folder\n");
+			XPRINTF("USBHDFSD: Exiting from fat_getFileStartCluster with a folder\n");
 			return 2;
 		}
 		ret = fat_getDirentryStartCluster(fatd, tmpName, startCluster, fatDir);
 		if (ret < 0) {
-			XPRINTF("Exiting from fat_getFileStartCluster with error %i\n", ret);
+			XPRINTF("USBHDFSD: Exiting from fat_getFileStartCluster with error %i\n", ret);
 			return ret;
 		}
-		XPRINTF("file's startCluster found. Name=%s, cluster=%i \n", fname, *startCluster);
+		XPRINTF("USBHDFSD: file's startCluster found. Name=%s, cluster=%i \n", fname, *startCluster);
 	}
-	XPRINTF("Exiting from fat_getFileStartCluster with a file\n");
+	XPRINTF("USBHDFSD: Exiting from fat_getFileStartCluster with a file\n");
 	return 1;
 }
 
@@ -802,7 +770,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 	dataSkip  = filePos  % fatd->partBpb.sectorSize;
 	bufferPos = 0;
 
-	XPRINTF("fileCluster = %i,  clusterPos= %i clusterSkip=%i, sectorSkip=%i dataSkip=%i \n",
+	XPRINTF("USBHDFSD: fileCluster = %i,  clusterPos= %i clusterSkip=%i, sectorSkip=%i dataSkip=%i \n",
 		fileCluster, clusterPos, clusterSkip, sectorSkip, dataSkip);
 
 	if (fileCluster < 2) {
@@ -816,8 +784,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 	while (nextChain && size > 0 ) {
 		chainSize = fat_getClusterChain(fatd, fileCluster, fatd->cbuf, MAX_DIR_CLUSTER, clusterChainStart);
 		clusterChainStart = 0;
-		if (chainSize == 0) { //the chain is full, but more chain parts exist
-			chainSize = MAX_DIR_CLUSTER;
+		if (chainSize >= MAX_DIR_CLUSTER) { //the chain is full, but more chain parts exist
 			fileCluster = fatd->cbuf[MAX_DIR_CLUSTER - 1];
 		}else { //chain fits in the chain buffer completely - no next chain needed
 			nextChain = 0;
@@ -825,8 +792,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 		while (clusterSkip >= MAX_DIR_CLUSTER) {
 			chainSize = fat_getClusterChain(fatd, fileCluster, fatd->cbuf, MAX_DIR_CLUSTER, clusterChainStart);
 			clusterChainStart = 0;
-			if (chainSize == 0) { //the chain is full, but more chain parts exist
-				chainSize = MAX_DIR_CLUSTER;
+			if (chainSize >= MAX_DIR_CLUSTER) { //the chain is full, but more chain parts exist
 				fileCluster = fatd->cbuf[MAX_DIR_CLUSTER - 1];
 			}else { //chain fits in the chain buffer completely - no next chain needed
 				nextChain = 0;
@@ -844,7 +810,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 
 				ret = READ_SECTOR(fatd->dev, startSector + j, sbuf);
 				if (ret < 0) {
-					printf("Read sector failed ! sector=%i\n", startSector + j);
+					printf("USBHDFSD: Read sector failed ! sector=%i\n", startSector + j);
 					return bufferPos;
 				}
 
@@ -855,7 +821,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 				if (bufSize > mass_device->sectorSize) {
 					bufSize = mass_device->sectorSize;
 				}
-				XPRINTF("memcopy dst=%i, src=%i, size=%i  bufSize=%i \n", bufferPos, dataSkip, bufSize-dataSkip, bufSize);
+				XPRINTF("USBHDFSD: memcopy dst=%i, src=%i, size=%i  bufSize=%i \n", bufferPos, dataSkip, bufSize-dataSkip, bufSize);
 				memcpy(buffer+bufferPos, sbuf + dataSkip, bufSize - dataSkip);
 				size-= (bufSize - dataSkip);
 				bufferPos +=  (bufSize - dataSkip);
@@ -898,7 +864,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
     if (ret < 0)
         return ret;
 
-	XPRINTF("dirCluster=%i startSector=%i (%i) dirSector=%i \n", dirCluster, startSector, startSector * mass_device->sectorSize, dirSector);
+	XPRINTF("USBHDFSD: dirCluster=%i startSector=%i (%i) dirSector=%i \n", dirCluster, startSector, startSector * mass_device->sectorSize, dirSector);
 
 	//go through first directory sector till the max number of directory sectors
 	//or stop when no more direntries detected
@@ -917,7 +883,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 		}
 		ret = READ_SECTOR(fatd->dev, startSector + i, sbuf);
 		if (ret < 0) {
-			printf("Read directory  sector failed ! sector=%i\n", startSector + i);
+			printf("USBHDFSD: Read directory  sector failed ! sector=%i\n", startSector + i);
 			return -EIO;
 		}
 
@@ -930,7 +896,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 			if (cont == 1) { //when short file name entry detected
 				fat_setFatDir(fatd, fatDir, dsfn, &dir, 0);
 #if 0
-                printf("fat_getNextDirentry %c%c%c%c%c%c %x %s %s\n",
+                printf("USBHDFSD: fat_getNextDirentry %c%c%c%c%c%c %x %s %s\n",
                     (dir.attr & FAT_ATTR_VOLUME_LABEL) ? 'v' : '-',
                     (dir.attr & FAT_ATTR_DIRECTORY) ? 'd' : '-',
                     (dir.attr & FAT_ATTR_READONLY) ? 'r' : '-',
@@ -979,7 +945,7 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 	{
 		if (g_fatd[i] == NULL)
 		{
-			XPRINTF("usb fat: allocate fat_driver %d!\n", sizeof(fat_driver));
+			XPRINTF("USBHDFSD: usb fat: allocate fat_driver %d!\n", sizeof(fat_driver));
 			g_fatd[i] = malloc(sizeof(fat_driver));
 			if (g_fatd[i] != NULL)
 			{
@@ -995,13 +961,13 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 
 	if (fatd == NULL)
 	{
-		printf("usb fat: unable to allocate drive!\n");
+		printf("USBHDFSD: usb fat: unable to allocate drive!\n");
 		return -1;
 	}
 
 	if (fatd->dev != NULL)
 	{
-		printf("usb fat: mount ERROR: alread mounted\n");
+		printf("USBHDFSD: usb fat: mount ERROR: alread mounted\n");
 		fat_forceUnmount(fatd->dev);
 	}
 
@@ -1020,7 +986,7 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 //---------------------------------------------------------------------------
 void fat_forceUnmount(mass_dev* dev)
 {
-	XPRINTF("usb fat: forceUnmount devId %i \n", dev->devId);
+	XPRINTF("USBHDFSD: usb fat: forceUnmount devId %i \n", dev->devId);
 
 	int i;
 	for (i = 0; i < NUM_DRIVES; ++i)
@@ -1057,7 +1023,7 @@ int fat_readSector(fat_driver* fatd, unsigned int sector, unsigned char** buf)
 
 	ret = READ_SECTOR(fatd->dev, sector, sbuf);
 	if (ret < 0) {
-		printf("Read sector failed ! sector=%i\n", sector);
+		printf("USBHDFSD: Read sector failed ! sector=%i\n", sector);
 		return -EIO;
 	}
 	*buf = sbuf;
