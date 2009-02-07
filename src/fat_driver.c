@@ -2,14 +2,21 @@
 //File name:    fat_driver.c
 //---------------------------------------------------------------------------
 #include <stdio.h>
+#include <errno.h>
+
+#ifdef WIN32
+#include <malloc.h>
+#include <memory.h>
+#include <string.h>
+#else
 #include <sysclib.h>
 //#include <sys/stat.h>
 
 #include <thbase.h>
-#include <errno.h>
 #include <sysmem.h>
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
+#endif
 
 #include "usbhd_common.h"
 #include "scache.h"
@@ -604,7 +611,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 	unsigned int startSector;
 	int cont;
 	int ret;
-	int dirPos;
+	unsigned int dirPos;
 	mass_dev* mass_device = fatd->dev;
 
 	cont = 1;
@@ -745,13 +752,13 @@ void fat_getClusterAtFilePos(fat_driver* fatd, fat_dir* fatDir, unsigned int fil
 }
 
 //---------------------------------------------------------------------------
-int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size) {
+int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, unsigned int size) {
 	int ret;
 	int i,j;
 	int chainSize;
 	int nextChain;
 	int startSector;
-	int bufSize;
+	unsigned int bufSize;
 	int sectorSkip;
 	int clusterSkip;
 	int dataSkip;
@@ -845,7 +852,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 	unsigned int startSector;
 	int cont, new_entry;
 	int ret;
-	int dirPos;
+	unsigned int dirPos;
 	unsigned int dirCluster;
 	mass_dev* mass_device = fatd->dev;
 
@@ -986,9 +993,9 @@ int fat_mount(mass_dev* dev, unsigned int start, unsigned int count)
 //---------------------------------------------------------------------------
 void fat_forceUnmount(mass_dev* dev)
 {
+	int i;
 	XPRINTF("USBHDFSD: usb fat: forceUnmount devId %i \n", dev->devId);
 
-	int i;
 	for (i = 0; i < NUM_DRIVES; ++i)
 	{
 		if (g_fatd[i] != NULL && g_fatd[i]->dev == dev)

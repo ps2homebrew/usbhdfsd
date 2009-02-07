@@ -39,7 +39,7 @@ typedef struct _part_raw_record {
 } part_raw_record;
 
 //---------------------------------------------------------------------------
-inline void part_getPartitionRecord(part_raw_record* raw, part_record* rec)
+USBHD_INLINE void part_getPartitionRecord(part_raw_record* raw, part_record* rec)
 {
     rec->sid = raw->sid;
     rec->start = getI32(raw->startLBA);
@@ -84,11 +84,11 @@ int part_getPartitionTable(mass_dev* dev, part_table* part)
 //---------------------------------------------------------------------------
 int part_connect(mass_dev* dev)
 {
+    part_table partTable;
     int count = 0;
     int i;
     XPRINTF("USBHDFSD: part_connect devId %i \n", dev->devId);
 
-    part_table partTable;
     if (part_getPartitionTable(dev, &partTable) < 0)
         return -1;
     

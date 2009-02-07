@@ -92,7 +92,7 @@ int strEqual(unsigned char *s1, unsigned char* s2);
 int fat_mount(mass_dev* dev, unsigned int start, unsigned int count);
 void fat_forceUnmount(mass_dev* dev);
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
-int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, int size);
+int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, unsigned int size);
 int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir);
 int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir);
 

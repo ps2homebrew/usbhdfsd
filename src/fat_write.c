@@ -11,12 +11,19 @@
  * See the file LICENSE included with this distribution for licensing terms.
  */
 //---------------------------------------------------------------------------
-//#include <tamtypes.h>
+#include <stdio.h>
+#include <errno.h>
+
+#ifdef WIN32
+#include <malloc.h>
+#include <memory.h>
+#include <string.h>
+#include <stdlib.h>
+#else
 #include <cdvdman.h>
 #include <sysclib.h>
-#include <stdio.h>
+#endif
 
-#include <errno.h>
 
 #include "usbhd_common.h"
 #include "fat_driver.h"
@@ -142,9 +149,9 @@ int fat_readEmptyClusters12(fat_driver* fatd) {
  scan FAT32 for free clusters and store them to the cluster stack
 */
 int fat_readEmptyClusters32(fat_driver* fatd) {
-        int i,j;
+    unsigned int i,j;
 	int ret;
-	int indexCount;
+	unsigned int indexCount;
 	unsigned int fatStartSector;
 	unsigned int cluster;
 	unsigned int clusterValue;
@@ -196,9 +203,9 @@ int fat_readEmptyClusters32(fat_driver* fatd) {
  scan FAT16 for free clusters and store them to the cluster stack
 */
 int fat_readEmptyClusters16(fat_driver* fatd) {
-        int i,j;
+    unsigned int i,j;
 	int ret;
-	int indexCount;
+	unsigned int indexCount;
 	unsigned int fatStartSector;
 	unsigned int cluster;
 	int oldClStackIndex;
@@ -618,7 +625,7 @@ unsigned int fat_getFreeCluster(fat_driver* fatd, unsigned int currentCluster) {
 /*
  simple conversion of the char from lower case to upper case
 */
-inline unsigned char toUpperChar(unsigned char c) {
+USBHD_INLINE unsigned char toUpperChar(unsigned char c) {
 	if (c >96  && c < 123) {
 		return (c - 32);
 	}
@@ -719,6 +726,14 @@ void setSfnDate(fat_direntry_sfn* dsfn, int mode) {
 	int year, month, day, hour, minute, sec;
 	unsigned char tmpClk[4];
 
+#ifdef WIN32
+    year = 0;
+    month = 0;
+    day = 0;
+    hour = 0;
+    minute = 0;
+    sec = 0;
+#else
 	//ps2 specific routine to get time and date
 	cd_clock_t	cdtime;
 	s32		tmp;
@@ -748,6 +763,7 @@ void setSfnDate(fat_direntry_sfn* dsfn, int mode) {
 		year = 2005; month = 1;	day = 6;
 		hour = 14; minute = 12; sec = 10;
 	}
+#endif
 
 	if (dsfn == NULL || mode == 0)  {
 		return;
@@ -905,7 +921,7 @@ int createShortNameMask(unsigned char* lname, unsigned char* sname) {
   path  - separated path (output)
   name  - separated filename (output)
 */
-int separatePathAndName(const char* fname, unsigned char* path, unsigned char* name) {
+int separatePathAndName(const unsigned char* fname, unsigned char* path, unsigned char* name) {
 	int path_len;
 	unsigned char *sp, *np;
 
@@ -916,7 +932,7 @@ int separatePathAndName(const char* fname, unsigned char* path, unsigned char* n
 	if(strlen(np) >= FAT_MAX_NAME) //if name is too long 
 		return -ENAMETOOLONG;        //  return error code
 	strcpy(name, np);              //copy name from correct part of fname string
-	if((path_len = ((void *)np - (void *)fname)) >= FAT_MAX_PATH) //if path is too long
+	if((path_len = (np - fname)) >= FAT_MAX_PATH) //if path is too long
 		return -ENAMETOOLONG;        //  return error code
 	strncpy(path, fname, path_len);//copy path from start of fname string
 	path[path_len] = 0;            //terminate path
@@ -1115,7 +1131,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 	unsigned int theSector;
 	int cont;
 	int ret;
-	int dirPos;
+	unsigned int dirPos;
 	int seq;
 	int mask_ix, mask_sh;
 	mass_dev* mass_device = fatd->dev;
@@ -1392,7 +1408,7 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 	unsigned int theSector;
 	int cont;
 	int ret;
-	int dirPos;
+	unsigned int dirPos;
 	int entryEndIndex;
 	int writeFlag;
 	mass_dev* mass_device = fatd->dev;
@@ -2034,13 +2050,13 @@ int fat_renameFile(fat_driver* fatd, char* sPName, char* dPName, char directory)
 } //ends fat_renameFile
 */ //End of commented out function (rename function for future implementation)
 //---------------------------------------------------------------------------
-int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, unsigned int filePos, unsigned char* buffer, int size) {
+int fat_writeFile(fat_driver* fatd, fat_dir* fatDir, int* updateClusterIndices, unsigned int filePos, unsigned char* buffer, unsigned int size) {
 	int ret;
 	int i,j;
 	int chainSize;
 	int nextChain;
 	int startSector;
-	int bufSize;
+	unsigned int bufSize;
 	int sectorSkip;
 	int clusterSkip;
 	int dataSkip;

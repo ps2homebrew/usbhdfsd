@@ -13,11 +13,19 @@
  */
 //---------------------------------------------------------------------------
 
-#include <tamtypes.h>
 #include <stdio.h>
+
+#ifdef WIN32
+#include <malloc.h>
+#include <memory.h>
+#include <string.h>
+#include <stdlib.h>
+#else
+#include <tamtypes.h>
 #include <sysmem.h>
 #define malloc(a)	AllocSysMemory(0,(a), NULL)
 #define free(a)		FreeSysMemory((a))
+#endif
 
 #include "usbhd_common.h"
 #include "mass_stor.h"
@@ -289,9 +297,10 @@ int scache_writeSector(cache_set* cache, unsigned int sector) {
 //---------------------------------------------------------------------------
 cache_set* scache_init(mass_dev* dev, int sectSize)
 {
+	cache_set* cache;
 	XPRINTF("cache: init devId = %i sectSize = %i \n", dev->devId, sectSize);
 
-	cache_set* cache = malloc(sizeof(cache_set));
+	cache = malloc(sizeof(cache_set));
 	if (cache == NULL) {
 		printf("scache init! Sector cache: can't alloate cache!\n");
 		return NULL;

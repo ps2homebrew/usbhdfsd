@@ -14,17 +14,24 @@
  */
 
 #include <stdio.h>
-#include <sysclib.h>
-#include <thsemap.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <io_common.h>
 #include <ioman.h>
 
+#ifdef WIN32
+#include <malloc.h>
+#include <memory.h>
+#include <string.h>
+#include <stdlib.h>
+#else
+#include <sysclib.h>
+#include <thsemap.h>
 #include <thbase.h>
-#include <errno.h>
 #include <sysmem.h>
 #define malloc(a)       AllocSysMemory(0,(a), NULL)
 #define free(a)         FreeSysMemory((a))
+#endif
 
 #include "usbhd_common.h"
 #include "fat_driver.h"
@@ -149,6 +156,7 @@ static int _lock_sema_id = 0;
 //---------------------------------------------------------------------------
 int _fs_init_lock(void)
 {
+#ifndef WIN32
 	iop_sema_t sp;
 
 	sp.initial = 1;
@@ -156,6 +164,7 @@ int _fs_init_lock(void)
 	sp.option = 0;
 	sp.attr = 0;
 	if((_lock_sema_id = CreateSema(&sp)) < 0) { return(-1); }
+#endif
 
 	return(0);
 }
@@ -163,14 +172,18 @@ int _fs_init_lock(void)
 //---------------------------------------------------------------------------
 int _fs_lock(void)
 {
+#ifndef WIN32
     if(WaitSema(_lock_sema_id) != _lock_sema_id) { return(-1); }
+#endif
     return(0);
 }
 
 //---------------------------------------------------------------------------
 int _fs_unlock(void)
 {
+#ifndef WIN32
     SignalSema(_lock_sema_id);
+#endif
     return(0);
 }
 
@@ -179,7 +192,9 @@ void fs_reset(void)
 {
 	int i;
 	for (i = 0; i < MAX_FILES; i++) { fsRec[i].file_flag = -1; }
+#ifndef WIN32
 	if(_lock_sema_id >= 0) { DeleteSema(_lock_sema_id); }
+#endif
 	_fs_init_lock();
 }
 
@@ -205,6 +220,7 @@ int fs_init(iop_device_t *driver)
 
 //---------------------------------------------------------------------------
 int fs_open(iop_file_t* fd, const char *name, int mode) {
+	fat_driver* fatd;
 	fs_rec* rec;
 	fs_rec* rec2;
 	int ret;
@@ -215,7 +231,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	XPRINTF("USBHDFSD: fs_open called: %s mode=%X \n", name, mode) ;
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	//check if the file is already open
@@ -230,7 +246,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 	//check if the slot is free
 	rec = fs_findFreeFileSlot();
-	if (index  < 0) { _fs_unlock(); return -EMFILE; }
+	if (rec == NULL) { _fs_unlock(); return -EMFILE; }
 
 	if((mode & O_WRONLY))  { //dlanor: corrected bad test condition
 		cluster = 0; //start from root
@@ -288,6 +304,7 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 
 //---------------------------------------------------------------------------
 int fs_close(iop_file_t* fd) {
+	fat_driver* fatd;
 	fs_rec* rec = (fs_rec*)fd->privdata;
     fd->privdata = 0;
 
@@ -298,7 +315,7 @@ int fs_close(iop_file_t* fd) {
 
 	rec->file_flag = -1;
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if ((rec->mode & O_WRONLY)) {
@@ -316,6 +333,7 @@ int fs_close(iop_file_t* fd) {
 
 //---------------------------------------------------------------------------
 int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
+	fat_driver* fatd;
 	fs_rec* rec = (fs_rec*)fd->privdata;
 
     if (rec == 0)
@@ -323,7 +341,7 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	switch(whence) {
@@ -354,6 +372,7 @@ int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 //---------------------------------------------------------------------------
 int fs_write(iop_file_t* fd, void * buffer, int size )
 {
+	fat_driver* fatd;
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
 	int updateClusterIndices = 0;
@@ -363,7 +382,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if (rec->file_flag != 1) {
@@ -397,6 +416,7 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 
 //---------------------------------------------------------------------------
 int fs_read(iop_file_t* fd, void * buffer, int size ) {
+	fat_driver* fatd;
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
 
@@ -405,7 +425,7 @@ int fs_read(iop_file_t* fd, void * buffer, int size ) {
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if (rec->file_flag != 1) {
@@ -450,22 +470,27 @@ int getNameSignature(const char *name) {
 //---------------------------------------------------------------------------
 int getMillis()
 {
+#ifdef WIN32
+    return 0;
+#else
 	iop_sys_clock_t clock;
 	u32 sec, usec;
 
 	GetSystemTime(&clock);
 	SysClock2USec(&clock, &sec, &usec);
 	return   (sec*1000) + (usec/1000);
+#endif
 }
 
 //---------------------------------------------------------------------------
 int fs_remove (iop_file_t *fd, const char *name) {
+	fat_driver* fatd;
 	fs_rec* rec;
 	int result;
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL)
     {
 		result = -ENODEV;
@@ -498,6 +523,7 @@ int fs_remove (iop_file_t *fd, const char *name) {
 
 //---------------------------------------------------------------------------
 int fs_mkdir  (iop_file_t *fd, const char *name) {
+	fat_driver* fatd;
 	int ret;
 	int sfnOffset;
 	unsigned int sfnSector;
@@ -506,7 +532,7 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	XPRINTF("USBHDFSD: fs_mkdir: name=%s \n",name);
@@ -536,11 +562,12 @@ int fs_mkdir  (iop_file_t *fd, const char *name) {
 // example: fioRmdir("mass:/dir1");  //    <-- doesn't work (bug?)
 //          fioRmdir("mass0:/dir1"); //    <-- works fine
 int fs_rmdir  (iop_file_t *fd, const char *name) {
+	fat_driver* fatd;
 	int ret;
 
     _fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	ret = fat_deleteFile(fatd, name, 1);
@@ -552,6 +579,7 @@ int fs_rmdir  (iop_file_t *fd, const char *name) {
 //---------------------------------------------------------------------------
 int fs_dopen  (iop_file_t *fd, const char *name)
 {
+	fat_driver* fatd;
 	int is_root = 0;
 	fs_dir* rec;
 
@@ -559,7 +587,7 @@ int fs_dopen  (iop_file_t *fd, const char *name)
     
     XPRINTF("USBHDFSD: fs_dopen called: unit %d name %s\n", fd->unit, name);
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	if( ((name[0] == '/') && (name[1] == '\0'))
@@ -603,6 +631,7 @@ int fs_dclose (iop_file_t *fd)
 //---------------------------------------------------------------------------
 int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 {
+	fat_driver* fatd;
 	int ret;
 	fs_dir* rec = (fs_dir *) fd->privdata;
 
@@ -613,7 +642,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
     
     XPRINTF("USBHDFSD: fs_dread called: unit %d\n", fd->unit);
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
     while (rec->status > 0
@@ -639,6 +668,7 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 //---------------------------------------------------------------------------
 int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 {
+	fat_driver* fatd;
 	int ret;
 	unsigned int cluster = 0;
 	fat_dir fatdir;
@@ -647,7 +677,7 @@ int fs_getstat(iop_file_t *fd, const char *name, fio_stat_t *stat)
 
     XPRINTF("USBHDFSD: fs_getstat called: unit %d name %s\n", fd->unit, name);
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	XPRINTF("USBHDFSD: Calling fat_getFileStartCluster from fs_getstat\n");
@@ -685,6 +715,7 @@ int fs_format (iop_file_t *fd)
 //---------------------------------------------------------------------------
 int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 {
+	fat_driver* fatd;
 	fs_dir* rec = (fs_dir *) fd->privdata;
     int ret;
 
@@ -693,7 +724,7 @@ int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 
 	_fs_lock();
 
-	fat_driver* fatd = fat_getData(fd->unit);
+	fatd = fat_getData(fd->unit);
 	if (fatd == NULL) { _fs_unlock(); return -ENODEV; }
 
 	switch (request) {
@@ -711,6 +742,7 @@ int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 	return ret;
 }
 
+#ifndef WIN32
 /* init file system driver */
 int InitFS()
 {
@@ -744,6 +776,8 @@ int InitFS()
 	// should return an error code if AddDrv fails...
 	return(0);
 }
+#endif
+
 //---------------------------------------------------------------------------
 //End of file:  fs_driver.c
 //---------------------------------------------------------------------------

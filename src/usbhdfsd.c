@@ -1,5 +1,5 @@
 /*
- * usb_mass.c - USB Mass storage driver for PS2 $Revision: $
+ * usb_mass.c - USB Mass storage driver for PS2 $Revision$
  */
 
 #define MAJOR_VER 1

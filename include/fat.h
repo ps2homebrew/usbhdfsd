@@ -135,7 +135,7 @@ typedef struct _fat_direntry {
 } fat_direntry;
 
 //---------------------------------------------------------------------------
-static inline unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster)
+static USBHD_INLINE unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster)
 {
 	return  partBpb->dataStart + (partBpb->clusterSize * (cluster-2));
 }
