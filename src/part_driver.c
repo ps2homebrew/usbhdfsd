@@ -62,14 +62,23 @@ int part_getPartitionTable(mass_dev* dev, part_table* part)
     }
 
     printf("USBHDFSD: boot signature %X %X\n", sbuf[0x1FE], sbuf[0x1FF]);
-    /* read 4 partition records */
-    for ( i = 0; i < 4; i++)
+    if (sbuf[0x1FE] == 0x55 && sbuf[0x1FF] == 0xAA)
     {
-        part_raw = ( part_raw_record* )(  sbuf + 0x01BE + ( i * 16 )  );
-
-        part_getPartitionRecord ( part_raw, &part -> record[ i ] );
+        for ( i = 0; i < 4; i++)
+        {
+            part_raw = ( part_raw_record* )(  sbuf + 0x01BE + ( i * 16 )  );
+            part_getPartitionRecord(part_raw, &part->record[i]);
+        }
+        return 4;
     }
-    return 0;
+    else
+    {
+        for ( i = 0; i < 4; i++)
+        {
+            part->record[i].sid = 0;;
+        }
+        return 0;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -77,7 +86,7 @@ int part_connect(mass_dev* dev)
 {
     int count = 0;
     int i;
-    printf("USBHDFSD: part_connect devId %i \n", dev->devId);
+    XPRINTF("USBHDFSD: part_connect devId %i \n", dev->devId);
 
     part_table partTable;
     if (part_getPartitionTable(dev, &partTable) < 0)
@@ -93,7 +102,7 @@ int part_connect(mass_dev* dev)
             partTable.record[ i ].sid == 0x0C ||  // fat 32
             partTable.record[ i ].sid == 0x0E)    // fat 16 LBA
         {
-            printf("USBHDFSD: mount partition %d\n", i);
+            XPRINTF("USBHDFSD: mount partition %d\n", i);
             if (fat_mount(dev, partTable.record[i].start, partTable.record[i].count) >= 0)
                 count++;
         }

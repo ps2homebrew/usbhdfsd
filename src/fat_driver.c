@@ -1015,20 +1015,5 @@ fat_driver * fat_getData(int device)
 }
 
 //---------------------------------------------------------------------------
-int fat_readSector(fat_driver* fatd, unsigned int sector, unsigned char** buf)
-{
-	int ret;
-	mass_dev* mass_device = fatd->dev;
-	unsigned char* sbuf = NULL; //sector buffer
-
-	ret = READ_SECTOR(fatd->dev, sector, sbuf);
-	if (ret < 0) {
-		printf("USBHDFSD: Read sector failed ! sector=%i\n", sector);
-		return -EIO;
-	}
-	*buf = sbuf;
-	return mass_device->sectorSize;
-}
-//---------------------------------------------------------------------------
 //End of file:  fat_driver.c
 //---------------------------------------------------------------------------

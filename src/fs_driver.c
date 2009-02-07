@@ -289,6 +289,10 @@ int fs_open(iop_file_t* fd, const char *name, int mode) {
 //---------------------------------------------------------------------------
 int fs_close(iop_file_t* fd) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
+    fd->privdata = 0;
+
+    if (rec == 0)
+        return -EBADF;
 
     _fs_lock();
 
@@ -313,6 +317,9 @@ int fs_close(iop_file_t* fd) {
 //---------------------------------------------------------------------------
 int fs_lseek(iop_file_t* fd, unsigned long offset, int whence) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
+
+    if (rec == 0)
+        return -EBADF;
 
     _fs_lock();
 
@@ -350,6 +357,9 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
 	int updateClusterIndices = 0;
+
+    if (rec == 0)
+        return -EBADF;
 
     _fs_lock();
 
@@ -389,6 +399,9 @@ int fs_write(iop_file_t* fd, void * buffer, int size )
 int fs_read(iop_file_t* fd, void * buffer, int size ) {
 	fs_rec* rec = (fs_rec*)fd->privdata;
 	int result;
+
+    if (rec == 0)
+        return -EBADF;
 
     _fs_lock();
 
@@ -576,9 +589,13 @@ int fs_dopen  (iop_file_t *fd, const char *name)
 //---------------------------------------------------------------------------
 int fs_dclose (iop_file_t *fd)
 {
+    if (fd->privdata == 0)
+        return -EBADF;
+
 	_fs_lock();
     XPRINTF("USBHDFSD: fs_dclose called: unit %d\n", fd->unit);
 	free(fd->privdata);
+    fd->privdata = 0;
 	_fs_unlock();
 	return 0;
 }
@@ -589,6 +606,8 @@ int fs_dread  (iop_file_t *fd, fio_dirent_t *buffer)
 	int ret;
 	fs_dir* rec = (fs_dir *) fd->privdata;
 
+    if (rec == 0)
+        return -EBADF;
 
 	_fs_lock();
     
@@ -666,7 +685,12 @@ int fs_format (iop_file_t *fd)
 //---------------------------------------------------------------------------
 int fs_ioctl(iop_file_t *fd, unsigned long request, void *data)
 {
+	fs_dir* rec = (fs_dir *) fd->privdata;
     int ret;
+
+    if (rec == 0)
+        return -EBADF;
+
 	_fs_lock();
 
 	fat_driver* fatd = fat_getData(fd->unit);

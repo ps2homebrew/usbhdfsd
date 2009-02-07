@@ -1,9 +1,9 @@
 /*
- * usb_mass.c - USB Mass storage driver for PS2
+ * usb_mass.c - USB Mass storage driver for PS2 $Revision: $
  */
 
 #define MAJOR_VER 1
-#define MINOR_VER 3
+#define MINOR_VER 4
 
 #include <loadcore.h>
 #include <stdio.h>
