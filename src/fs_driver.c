@@ -12,7 +12,7 @@
  *
  * See the file LICENSE included with this distribution for licensing terms.
  */
-
+//---------------------------------------------------------------------------
 #include <stdio.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -72,8 +72,10 @@ typedef struct _fs_dir {
 #define MAX_FILES 16
 fs_rec  fsRec[MAX_FILES]; //file info record
 
+#ifndef WIN32
 static iop_device_t fs_driver;
 static iop_device_ops_t fs_functarray;
+#endif
 
 void fillStat(fio_stat_t *stat, fat_dir *fatdir)
 {

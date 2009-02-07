@@ -12,7 +12,6 @@
  * See the file LICENSE included with this distribution for licensing terms.
  */
 //---------------------------------------------------------------------------
-
 #include <stdio.h>
 
 #ifdef WIN32

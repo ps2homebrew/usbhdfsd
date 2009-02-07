@@ -87,17 +87,17 @@ typedef struct _fat_dir {
 	fat_dir_chain_record  chain[DIR_CHAIN_SIZE];  //cluser/offset cache - for seeking purpose
 } fat_dir;
 
-int strEqual(unsigned char *s1, unsigned char* s2);
+int strEqual(const unsigned char *s1, const unsigned char* s2);
 
 int fat_mount(mass_dev* dev, unsigned int start, unsigned int count);
 void fat_forceUnmount(mass_dev* dev);
 void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir);
 int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned char* buffer, unsigned int size);
-int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir);
+int fat_getFirstDirentry(fat_driver* fatd, const unsigned char* dirName, fat_dir_list* fatdlist, fat_dir* fatDir);
 int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir);
 
 fat_driver * fat_getData(int device);
-int      fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir);
+int      fat_getFileStartCluster(fat_driver* fatd, const unsigned char* fname, unsigned int* startCluster, fat_dir* fatDir);
 int      fat_getClusterChain(fat_driver* fatd, unsigned int cluster, unsigned int* buf, int bufSize, int start);
 
 #endif

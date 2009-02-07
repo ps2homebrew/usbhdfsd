@@ -49,7 +49,7 @@ int InitFAT()
 }
 
 //---------------------------------------------------------------------------
-int strEqual(unsigned char *s1, unsigned char* s2) {
+int strEqual(const unsigned char *s1, const unsigned char* s2) {
     unsigned char u1, u2;
     for (;;) {
 		u1 = *s1++;
@@ -123,24 +123,24 @@ int fat_getClusterChain12(fat_driver* fatd, unsigned int cluster, unsigned int* 
 			sectorSpan = 1;
 		}
 		if (lastFatSector !=  fatSector || sectorSpan) {
-				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
+			ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector, sbuf);
+			if (ret < 0) {
+				printf("USBHDFSD: Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
+				return -EIO;
+			}
+			lastFatSector = fatSector;
+
+			if (sectorSpan) {
+				xbuf[0] = sbuf[fatd->partBpb.sectorSize - 2];
+				xbuf[1] = sbuf[fatd->partBpb.sectorSize - 1];
+				ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
 				if (ret < 0) {
-					printf("USBHDFSD: Read fat12 sector failed! sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector );
+					printf("USBHDFSD: Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
 					return -EIO;
 				}
-				lastFatSector = fatSector;
-
-				if (sectorSpan) {
-					xbuf[0] = sbuf[fatd->partBpb.sectorSize - 2];
-					xbuf[1] = sbuf[fatd->partBpb.sectorSize - 1];
-					ret = READ_SECTOR(fatd->dev, fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1, sbuf);
-					if (ret < 0) {
-						printf("USBHDFSD: Read fat12 sector failed sector=%i! \n", fatd->partBpb.partStart + fatd->partBpb.resSectors + fatSector + 1);
-						return -EIO;
-					}
-					xbuf[2] = sbuf[0];
-					xbuf[3] = sbuf[1];
-				}
+				xbuf[2] = sbuf[0];
+				xbuf[3] = sbuf[1];
+			}
 		}
 		if (sectorSpan) { // use xbuf as source buffer
 			cluster = fat_getClusterRecord12(xbuf + (recordOffset % fatd->partBpb.sectorSize) - (fatd->partBpb.sectorSize-2), cluster % 2);
@@ -677,7 +677,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 // start cluster should be 0 - if we want to search from root directory
 // otherwise the start cluster should be correct cluster of directory
 // to search directory - set fatDir as NULL
-int fat_getFileStartCluster(fat_driver* fatd, const char* fname, unsigned int* startCluster, fat_dir* fatDir) {
+int fat_getFileStartCluster(fat_driver* fatd, const unsigned char* fname, unsigned int* startCluster, fat_dir* fatDir) {
 	unsigned char tmpName[257];
 	int i;
 	int offset;
@@ -926,7 +926,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 }
 
 //---------------------------------------------------------------------------
-int fat_getFirstDirentry(fat_driver* fatd, char * dirName, fat_dir_list* fatdlist, fat_dir* fatDir) {
+int fat_getFirstDirentry(fat_driver* fatd, const unsigned char* dirName, fat_dir_list* fatdlist, fat_dir* fatDir) {
 	int ret;
 	unsigned int startCluster = 0;
 

@@ -24,7 +24,6 @@
 #include <sysclib.h>
 #endif
 
-
 #include "usbhd_common.h"
 #include "fat_driver.h"
 #include "fat.h"
@@ -1863,7 +1862,7 @@ int fat_updateSfn(fat_driver* fatd, int size, unsigned int sfnSector, int sfnOff
  sfnOffset      - offset (in bytes) of the SFN entry (output)
 */
 
-int fat_createFile(fat_driver* fatd, const char* fname, char directory, char escapeNotExist, unsigned int* cluster, unsigned int* sfnSector, int* sfnOffset) {
+int fat_createFile(fat_driver* fatd, const unsigned char* fname, char directory, char escapeNotExist, unsigned int* cluster, unsigned int* sfnSector, int* sfnOffset) {
 	int ret;
 	unsigned int startCluster;
 	unsigned int directoryCluster;
@@ -1939,7 +1938,7 @@ int fat_createFile(fat_driver* fatd, const char* fname, char directory, char esc
 
 
 //---------------------------------------------------------------------------
-int fat_deleteFile(fat_driver* fatd, const char* fname, char directory) {
+int fat_deleteFile(fat_driver* fatd, const unsigned char* fname, char directory) {
 	int ret;
 	unsigned int startCluster;
 	unsigned int directoryCluster;
