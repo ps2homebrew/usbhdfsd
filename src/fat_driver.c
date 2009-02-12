@@ -355,81 +355,80 @@ int fat_getPartitionBootSector(mass_dev* dev, unsigned int sector, fat_bpb* part
  2 - long name dir entry found
  3 - deleted dir entry found
 */
-int fat_getDirentry(unsigned char fatType, fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir ) {
+int fat_getDirentry(unsigned char fatType, fat_direntry* dir_entry, fat_direntry_summary* dir ) {
 	int i, j;
 	int offset;
 	int cont;
 
 	//detect last entry - all zeros (slight modification by radad)
-	if (dsfn->name[0] == 0) {
+	if (dir_entry->sfn.name[0] == 0) {
 		return 0;
 	}
 	//detect deleted entry - it will be ignored
-	if (dsfn->name[0] == 0xE5) {
+	if (dir_entry->sfn.name[0] == 0xE5) {
 		return 3;
 	}
 
 	//detect long filename
-	if (dlfn->rshv == 0x0F && dlfn->reserved1 == 0x00 && dlfn->reserved2[0] == 0x00) {
+	if (dir_entry->lfn.rshv == 0x0F && dir_entry->lfn.reserved1 == 0x00 && dir_entry->lfn.reserved2[0] == 0x00) {
 		//long filename - almost whole direntry is unicode string - extract it
-		offset = dlfn->entrySeq & 0x3f;
+		offset = dir_entry->lfn.entrySeq & 0x3f;
 		offset--;
 		offset = offset * 13;
 		//name - 1st part
 		cont = 1;
 		for (i = 0; i < 10 && cont; i+=2) {
-			if (dlfn->name1[i]==0 && dlfn->name1[i+1] == 0) {
+			if (dir_entry->lfn.name1[i]==0 && dir_entry->lfn.name1[i+1] == 0) {
 				dir->name[offset] = 0; //terminate
 				cont = 0; //stop
 			} else {
-				dir->name[offset] = dlfn->name1[i];
+				dir->name[offset] = dir_entry->lfn.name1[i];
 				offset++;
 			}
 		}
 		//name - 2nd part
 		for (i = 0; i < 12 && cont; i+=2) {
-			if (dlfn->name2[i]==0 && dlfn->name2[i+1] == 0) {
+			if (dir_entry->lfn.name2[i]==0 && dir_entry->lfn.name2[i+1] == 0) {
 				dir->name[offset] = 0; //terminate
 				cont = 0; //stop
 			} else {
-				dir->name[offset] = dlfn->name2[i];
+				dir->name[offset] = dir_entry->lfn.name2[i];
 				offset++;
 			}
 		}
 		//name - 3rd part
 		for (i = 0; i < 4 && cont; i+=2) {
-			if (dlfn->name3[i]==0 && dlfn->name3[i+1] == 0) {
+			if (dir_entry->lfn.name3[i]==0 && dir_entry->lfn.name3[i+1] == 0) {
 				dir->name[offset] = 0; //terminate
 				cont = 0; //stop
 			} else {
-				dir->name[offset] = dlfn->name3[i];
+				dir->name[offset] = dir_entry->lfn.name3[i];
 				offset++;
 			}
 		}
-		if ((dlfn->entrySeq & 0x40)) { //terminate string flag
+		if ((dir_entry->lfn.entrySeq & 0x40)) { //terminate string flag
 			dir->name[offset] = 0;
 		}
 		return 2;
 	} else {
 		//short filename
 		//copy name
-
-		for (i = 0; i < 8 && dsfn->name[i]!= 32; i++) {
-			dir->sname[i] = dsfn->name[i];
+		for (i = 0; i < 8 && dir_entry->sfn.name[i]!= 32; i++) {
+			dir->sname[i] = dir_entry->sfn.name[i];
 			// NT—adaption for LaunchELF
-			if (dsfn->reservedNT & 0x08 &&
+			if (dir_entry->sfn.reservedNT & 0x08 &&
 			  dir->sname[i] >= 'A' && dir->sname[i] <= 'Z') {
 				dir->sname[i] += 0x20;	//Force standard letters in name to lower case
 			}
 		}
-		for (j=0; j < 3 && dsfn->ext[j] != 32; j++) {
+		for (j=0; j < 3 && dir_entry->sfn.ext[j] != 32; j++) {
 			if (j == 0) {
 				dir->sname[i] = '.';
 				i++;
 			}
-			dir->sname[i+j] = dsfn->ext[j];
+			dir->sname[i+j] = dir_entry->sfn.ext[j];
 			// NT—adaption for LaunchELF
-			if (dsfn->reservedNT & 0x10 &&
+			if (dir_entry->sfn.reservedNT & 0x10 &&
 			  dir->sname[i+j] >= 'A' && dir->sname[i+j] <= 'Z') {
 				dir->sname[i+j] += 0x20;	//Force standard letters in ext to lower case
 			}
@@ -439,15 +438,14 @@ int fat_getDirentry(unsigned char fatType, fat_direntry_sfn* dsfn, fat_direntry_
 			for (i =0 ; dir->sname[i] !=0; i++) dir->name[i] = dir->sname[i];
 			dir->name[i] = 0;
 		}
-		dir->attr = dsfn->attr;
-		dir->size = getI32(dsfn->size);
+		dir->attr = dir_entry->sfn.attr;
+		dir->size = getI32(dir_entry->sfn.size);
         if (fatType == FAT32)
-            dir->cluster = getI32_2(dsfn->clusterL, dsfn->clusterH);
+            dir->cluster = getI32_2(dir_entry->sfn.clusterL, dir_entry->sfn.clusterH);
         else
-            dir->cluster = getI16(dsfn->clusterL);
+            dir->cluster = getI16(dir_entry->sfn.clusterL);
 		return 1;
 	}
-
 }
 
 //---------------------------------------------------------------------------
@@ -519,7 +517,7 @@ void fat_setFatDirChain(fat_driver* fatd, fat_dir* fatDir) {
 
 //---------------------------------------------------------------------------
 /* Set base attributes of direntry */
-void fat_setFatDir(fat_driver* fatd, fat_dir* fatDir, fat_direntry_sfn* dsfn, fat_direntry* dir, int getClusterInfo ) {
+void fat_setFatDir(fat_driver* fatd, fat_dir* fatDir, fat_direntry_sfn* dsfn, fat_direntry_summary* dir, int getClusterInfo ) {
 	int i;
 	unsigned char* srcName;
 
@@ -532,7 +530,7 @@ void fat_setFatDir(fat_driver* fatd, fat_dir* fatDir, fat_direntry_sfn* dsfn, fa
 	for (i = 0; srcName[i] != 0; i++) fatDir->name[i] = srcName[i];
 	fatDir->name[i] = 0; //terminate
 
-	fatDir->attr = dsfn->attr;
+	fatDir->attr = dir->attr;
 	fatDir->size = dir->size;
 
 	//created Date: Day, Month, Year-low, Year-high
@@ -603,9 +601,7 @@ int fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsi
 
 //---------------------------------------------------------------------------
 int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsigned int* startCluster, fat_dir* fatDir) {
-	fat_direntry_sfn* dsfn;
-	fat_direntry_lfn* dlfn;
-	fat_direntry dir;
+	fat_direntry_summary dir;
 	int i;
 	int dirSector;
 	unsigned int startSector;
@@ -646,16 +642,15 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 
 		// go through start of the sector till the end of sector
 		while (cont &&  dirPos < fatd->partBpb.sectorSize) {
-			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
-			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get single directory entry from sector buffer
+            fat_direntry* dir_entry = (fat_direntry*) (sbuf + dirPos);
+			cont = fat_getDirentry(fatd->partBpb.fatType, dir_entry, &dir); //get single directory entry from sector buffer
 			if (cont == 1) { //when short file name entry detected
 				if (!(dir.attr & FAT_ATTR_VOLUME_LABEL)) { //not volume label
 					if ((strEqual(dir.sname, dirName) == 0) ||
 						(strEqual(dir.name, dirName) == 0) ) {
 							XPRINTF("USBHDFSD: found! %s\n", dir.name);
 							if (fatDir != NULL) { //fill the directory properties
-								fat_setFatDir(fatd, fatDir, dsfn, &dir, 1);
+								fat_setFatDir(fatd, fatDir, &dir_entry->sfn, &dir, 1);
 							}
 							*startCluster = dir.cluster;
 							XPRINTF("USBHDFSD: direntry %s found at cluster: %i \n", dirName, dir.cluster);
@@ -666,7 +661,7 @@ int fat_getDirentryStartCluster(fat_driver* fatd, unsigned char* dirName, unsign
 				dir.sname[0] = 0;
 				dir.name[0] = 0;
 			}//ends "if (cont == 1)"
-			dirPos += 32; //directory entry of size 32 bytes
+			dirPos += sizeof(fat_direntry);
 		}//ends "while"
 	}//ends "for"
 	XPRINTF("USBHDFSD: direntry %s not found! \n", dirName);
@@ -844,9 +839,7 @@ int fat_readFile(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsign
 
 //---------------------------------------------------------------------------
 int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDir) {
-	fat_direntry_sfn* dsfn;
-	fat_direntry_lfn* dlfn;
-	fat_direntry dir;
+	fat_direntry_summary dir;
 	int i;
 	int dirSector;
 	unsigned int startSector;
@@ -896,12 +889,11 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 
 		// go through sector from current pos till its end
 		while (cont &&  (dirPos < fatd->partBpb.sectorSize)) {
-			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
-			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get a directory entry from sector
+            fat_direntry* dir_entry = (fat_direntry*) (sbuf + dirPos);
+			cont = fat_getDirentry(fatd->partBpb.fatType, dir_entry, &dir); //get a directory entry from sector
 			fatdlist->direntryIndex++; //Note current entry processed
 			if (cont == 1) { //when short file name entry detected
-				fat_setFatDir(fatd, fatDir, dsfn, &dir, 0);
+				fat_setFatDir(fatd, fatDir, &dir_entry->sfn, &dir, 0);
 #if 0
                 printf("USBHDFSD: fat_getNextDirentry %c%c%c%c%c%c %x %s %s\n",
                     (dir.attr & FAT_ATTR_VOLUME_LABEL) ? 'v' : '-',
@@ -916,7 +908,7 @@ int fat_getNextDirentry(fat_driver* fatd, fat_dir_list* fatdlist, fat_dir* fatDi
 #endif
 				return 1;
 			}
-			dirPos += 32; //directory entry of size 32 bytes
+			dirPos += sizeof(fat_direntry);
 		}//ends "while"
 		dirPos = 0;
 	}//ends "for"

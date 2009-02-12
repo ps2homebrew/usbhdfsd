@@ -636,10 +636,10 @@ USBHD_INLINE unsigned char toUpperChar(unsigned char c) {
 returns number of direntry positions that the name takes
 //dlanor: Note that this only includes the long_name entries
 */
-int getDirentrySize(unsigned char* lname) {
+int getDirentrySize(const unsigned char* lname) {
 	int len;
 	int result;
-	len = strlen((const char*)lname);
+	len = strlen(lname);
 	result = len / 13;
 	if (len % 13 > 0) result++;
 	return result;
@@ -649,7 +649,7 @@ int getDirentrySize(unsigned char* lname) {
 /*
 compute checksum of the short filename
 */
-unsigned char computeNameChecksum(unsigned char* sname) {
+unsigned char computeNameChecksum(const unsigned char* sname) {
 	unsigned char result;
 	int i;
 
@@ -665,38 +665,36 @@ unsigned char computeNameChecksum(unsigned char* sname) {
 /*
   fill the LFN (long filename) direntry
 */
-void setLfnEntry(unsigned char* lname, int nameSize, unsigned char chsum, unsigned char* buffer, int part, int maxPart){
-        int i,j;
-	unsigned char* offset;
+void setLfnEntry(const unsigned char* lname, int nameSize, unsigned char chsum, fat_direntry_lfn* dlfn_start, int part, int maxPart){
+    int i,j;
 	unsigned char name[26]; //unicode name buffer = 13 characters per 2 bytes
 	int nameStart;
 	fat_direntry_lfn* dlfn;
 
-        offset = buffer + (maxPart-part) * 32;
-	dlfn = (fat_direntry_lfn*) offset;
+	dlfn = dlfn_start + (maxPart - part);
 
 	nameStart = 13 * part;
-        j = nameSize - nameStart;
-        if (j > 13) {
-        	j = 13;
-        }
+    j = nameSize - nameStart;
+    if (j > 13) {
+        j = 13;
+    }
 
-        //fake unicode conversion
-        for (i = 0; i < j; i++) {
-        	name[i*2]   = lname[nameStart + i];
-        	name[i*2+1] = 0;
-        }
+    //fake unicode conversion
+    for (i = 0; i < j; i++) {
+        name[i*2]   = lname[nameStart + i];
+        name[i*2+1] = 0;
+    }
 
-        //rest of the name is zero terminated and padded with 0xFF
-        for (i = j; i < 13; i++) {
+    //rest of the name is zero terminated and padded with 0xFF
+    for (i = j; i < 13; i++) {
 		if (i == j) {
-	        	name[i*2]   = 0;
-       			name[i*2+1] = 0;
+            name[i*2]   = 0;
+            name[i*2+1] = 0;
 		} else {
 			name[i*2] = 0xFF;
 			name[i*2+1] = 0xFF;
 		}
-        }
+    }
 
 	if (maxPart == 0) {
 		i = 1;
@@ -801,11 +799,9 @@ void setSfnDate(fat_direntry_sfn* dsfn, int mode) {
 /*
   fill the SFN (short filename) direntry
 */
-void setSfnEntry(unsigned char* shortName, char directory, unsigned char *buffer, unsigned int cluster) {
+void setSfnEntry(const unsigned char* shortName, char directory, fat_direntry_sfn* dsfn, unsigned int cluster) {
     int i;
-	fat_direntry_sfn* dsfn;
 
-	dsfn = (fat_direntry_sfn*) buffer;
 	//name + ext
 	for (i = 0; i < 8; i++) dsfn->name[i] = shortName[i];
 	for (i = 0; i < 3; i++) dsfn->ext[i]  = shortName[i+8];
@@ -1019,9 +1015,8 @@ int setShortNameSequence(fat_driver* fatd, unsigned char* sname) {
 /*
   find space where to put the direntry
 */
-int getDirentryStoreOffset(fat_driver* fatd, int entryCount, unsigned char* lname, int* direntrySize ) {
+int getDirentryStoreOffset(fat_driver* fatd, int entryCount, int direntrySize ) {
 	int i;
-	int size;
 	int tightIndex;
 	int looseIndex;
 	int cont;
@@ -1030,11 +1025,6 @@ int getDirentryStoreOffset(fat_driver* fatd, int entryCount, unsigned char* lnam
 	int slotSize;
 	int mask_ix, mask_sh;
 
-
-	//direntry size for long name + 1 additional direntry for short name
-	size = getDirentrySize(lname) + 1;
-	XPRINTF("USBHDFSD: Direntry size=%d\n", size);
-	*direntrySize = size;
 
 	//we search for sequence of deleted or empty entries (cleared bits in dir_used_mask)
 	//1) search the tight slot (that fits completely. ex: size = 3, and slot space is 3 )
@@ -1059,12 +1049,12 @@ int getDirentryStoreOffset(fat_driver* fatd, int entryCount, unsigned char* lnam
 				XPRINTF("USBHDFSD: *Start slot at index=%d ",slotStart);
 			}
 		} else { //occupied entry
-			if (tightIndex < 0 && slotSize == size) {
+			if (tightIndex < 0 && slotSize == direntrySize) {
 				tightIndex = slotStart;
 				XPRINTF("USBHDFSD: !Set tight index= %d\n", tightIndex);
 			}
-			if (looseIndex < 0 && slotSize > size) {
-				looseIndex = slotStart + slotSize - size;
+			if (looseIndex < 0 && slotSize > direntrySize) {
+				looseIndex = slotStart + slotSize - direntrySize;
 				XPRINTF("USBHDFSD: !Set loose index= %d\n", looseIndex);
 			}
 			if (tightIndex >= 0 && looseIndex >= 0) {
@@ -1121,9 +1111,7 @@ int getDirentryStoreOffset(fat_driver* fatd, int entryCount, unsigned char* lnam
 int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* sname,
 			char directory, unsigned int* startCluster,
 			unsigned int* retSector, int* retOffset) {
-	fat_direntry_sfn* dsfn;
-	fat_direntry_lfn* dlfn;
-	fat_direntry dir;
+	fat_direntry_summary dir;
 	int i, j;
 	int dirSector;
 	unsigned int startSector;
@@ -1170,9 +1158,8 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 
 		// go through start of the sector till the end of sector
 		while (cont &&  (dirPos < fatd->partBpb.sectorSize) && (j < DIR_MASK_SIZE)) {
-			dsfn = (fat_direntry_sfn*) (sbuf + dirPos);
-			dlfn = (fat_direntry_lfn*) (sbuf + dirPos);
-			cont = fat_getDirentry(fatd->partBpb.fatType, dsfn, dlfn, &dir); //get single directory entry from sector buffer
+            fat_direntry* dir_entry = (fat_direntry*) (sbuf + dirPos);
+			cont = fat_getDirentry(fatd->partBpb.fatType, dir_entry, &dir); //get single directory entry from sector buffer
 			mask_ix = j>>3;
 			mask_sh = j&7;
 			switch (cont) {
@@ -1195,7 +1182,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 							fatd->deIdx++;
 							return 0;
 						}//ends "if" clause for matching name
-						seq = getShortNameSequence(dsfn->name, dsfn->ext, sname);
+						seq = getShortNameSequence(dir_entry->sfn.name, dir_entry->sfn.ext, sname);
 						if(seq < SEQ_MASK_SIZE)
 							fatd->seq_mask[seq>>3] |= (1<<(seq & 7));
 						fatd->deIdx = 0;
@@ -1217,7 +1204,7 @@ int fat_fillDirentryInfo(fat_driver* fatd, unsigned char* lname, unsigned char* 
 					fatd->deIdx = 0;
 					break;
 			}//ends "switch"
-			dirPos += 32; //directory entry of size 32 bytes
+			dirPos += sizeof(fat_direntry);
 			j++;
 		}
 	}
@@ -1315,7 +1302,7 @@ int enlargeDirentryClusterSpace(fat_driver* fatd, unsigned int startCluster, int
   returns the number of the direntries (3 means: 2 entries for long name + 1 entry for short name)
   note: the filesize set in the direntry is 0 (for both directory and file)
 */
-int createDirentry(unsigned char* lname, unsigned char* sname, char directory, unsigned int cluster, unsigned char* buffer) {
+int createDirentry(const unsigned char* lname, const unsigned char* sname, char directory, unsigned int cluster, fat_direntry* dir_entry) {
 	int i;
 	int lsize;
 	int nameSize;
@@ -1323,13 +1310,13 @@ int createDirentry(unsigned char* lname, unsigned char* sname, char directory, u
 
 	lsize = getDirentrySize(lname) - 1;
 	chsum = computeNameChecksum(sname);
-	nameSize = strlen((const char*) lname);
+	nameSize = strlen(lname);
 	for (i = 0; i <= lsize; i++) {
-		setLfnEntry(lname, nameSize, chsum, buffer, lsize-i, lsize);
+		setLfnEntry(lname, nameSize, chsum, &dir_entry->lfn, lsize-i, lsize);
 	}
 	lsize++;
 	//now create direntry of the short name right behind the long name direntries
-	setSfnEntry(sname, directory, buffer + (lsize * 32), cluster);
+	setSfnEntry(sname, directory, &dir_entry[lsize].sfn, cluster);
 	return lsize + 1;
 }
 
@@ -1341,21 +1328,14 @@ int createDirentry(unsigned char* lname, unsigned char* sname, char directory, u
 
 */
 int createDirectorySpace(fat_driver* fatd, unsigned int dirCluster, unsigned int parentDirCluster) {
-	int i;
+	int i, j;
 	int ret;
 	unsigned int startSector;
-	unsigned char name[11];
 
 	//we do not mess with root directory
 	if (dirCluster < 2) {
 		return -EFAULT;
 	}
-
-	for (i = 0; i< 11; i++) name[i] = 32;
-	name[0] = '.';
-	setSfnEntry(name, 1, fatd->tbuf, dirCluster);
-	name[1] = '.';
-	setSfnEntry(name, 1, fatd->tbuf + 32, parentDirCluster);
 
 	//we create directory space inside one cluster. No need to worry about
 	//large dir space spread on multiple clusters
@@ -1373,7 +1353,13 @@ int createDirectorySpace(fat_driver* fatd, unsigned int dirCluster, unsigned int
 		}
 		memset(sbuf, 0, fatd->partBpb.sectorSize); //clean the sector
 		if (i == 0) {
-			memcpy(sbuf, fatd->tbuf, 64);
+            fat_direntry_sfn* dsfn = (fat_direntry_sfn*) sbuf;
+            unsigned char name[11];
+            for (j = 0; j< 11; j++) name[j] = 32;
+            name[0] = '.';
+            setSfnEntry(name, 1, dsfn + 0, dirCluster);
+            name[1] = '.';
+            setSfnEntry(name, 1, dsfn + 1, parentDirCluster);
 		}
 		ret = WRITE_SECTOR(fatd->dev, startSector + i);
 		if (ret < 0) {
@@ -1565,9 +1551,12 @@ int fat_modifyDirSpace(fat_driver* fatd, unsigned char* lname, char directory, c
 	}
 	XPRINTF("USBHDFSD: I: new short name='%s' \n", sname);
 
+	//direntry size for long name + 1 additional direntry for short name
+	direntrySize = getDirentrySize(lname) + 1;
+	XPRINTF("USBHDFSD: Direntry size=%d\n", direntrySize);
 
 	//find the offset (index) of the direntry space where to put this direntry
-	entryIndex = getDirentryStoreOffset(fatd, entryCount, lname, &direntrySize);
+	entryIndex = getDirentryStoreOffset(fatd, entryCount, direntrySize);
 	XPRINTF("USBHDFSD: I: direntry store offset=%d\n", entryIndex);
 
 	//if the direntry offset excede current space of directory clusters
@@ -1586,7 +1575,7 @@ int fat_modifyDirSpace(fat_driver* fatd, unsigned char* lname, char directory, c
 	XPRINTF("USBHDFSD: I: new file/dir cluster=%d\n", newCluster);
 
 	//create direntry data to temporary buffer
-	ret = createDirentry(lname, sname, directory, newCluster, fatd->tbuf);
+	ret = createDirentry(lname, sname, directory, newCluster, (fat_direntry*) fatd->tbuf);
 	XPRINTF("USBHDFSD: I: create direntry to buf ret=%d\n", ret);
 	if (ret < 0) {
 		return ret;

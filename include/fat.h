@@ -126,13 +126,18 @@ typedef struct _fat_direntry_lfn {
 	unsigned char name3[4];		//Last 2 letters of LFN entry.
 } fat_direntry_lfn;
 
-typedef struct _fat_direntry {
+typedef union _fat_direntry {
+    fat_direntry_sfn sfn;
+    fat_direntry_lfn lfn;
+} fat_direntry;
+
+typedef struct _fat_direntry_summary {
 	unsigned char attr;		//Attributes (bits:5-Archive 4-Directory 3-Volume Label 2-System 1-Hidden 0-Read Only)
 	unsigned char name[FAT_MAX_NAME];//Long name (zero terminated)
 	unsigned char sname[13];	//Short name (zero terminated)
 	unsigned int  size;		//file size, 0 for directory
 	unsigned int  cluster;		//file start cluster 
-} fat_direntry;
+} fat_direntry_summary;
 
 //---------------------------------------------------------------------------
 static USBHD_INLINE unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned int cluster)
@@ -141,7 +146,7 @@ static USBHD_INLINE unsigned int fat_cluster2sector(fat_bpb* partBpb, unsigned i
 }
 
 unsigned int fat_getClusterRecord12(unsigned char* buf, int type);
-int      fat_getDirentry(unsigned char fatType, fat_direntry_sfn* dsfn, fat_direntry_lfn* dlfn, fat_direntry* dir );
+int      fat_getDirentry(unsigned char fatType, fat_direntry* dir_entry, fat_direntry_summary* dir );
 int      fat_getDirentrySectorData(fat_driver* fatd, unsigned int* startCluster, unsigned int* startSector, int* dirSector);
 void     fat_invalidateLastChainResult(fat_driver* fatd);
 void     fat_getClusterAtFilePos(fat_driver* fatd, fat_dir* fatDir, unsigned int filePos, unsigned int* cluster, unsigned int* clusterPos);
