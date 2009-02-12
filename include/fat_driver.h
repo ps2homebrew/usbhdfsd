@@ -43,9 +43,6 @@ typedef struct _fat_driver {
 	unsigned int  lastChainCluster;
 	int lastChainResult;
 
-	// fat_write
-	unsigned char tbuf[512]; //temporary buffer
-
 /* enough for long filename of length 260 characters (20*13) and one short filename */
 #define MAX_DE_STACK 21
 	unsigned int deSec[MAX_DE_STACK]; //direntry sector

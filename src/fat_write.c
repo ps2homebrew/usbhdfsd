@@ -665,13 +665,10 @@ unsigned char computeNameChecksum(const unsigned char* sname) {
 /*
   fill the LFN (long filename) direntry
 */
-void setLfnEntry(const unsigned char* lname, int nameSize, unsigned char chsum, fat_direntry_lfn* dlfn_start, int part, int maxPart){
+void setLfnEntry(const unsigned char* lname, int nameSize, unsigned char chsum, fat_direntry_lfn* dlfn, int part, int maxPart){
     int i,j;
 	unsigned char name[26]; //unicode name buffer = 13 characters per 2 bytes
 	int nameStart;
-	fat_direntry_lfn* dlfn;
-
-	dlfn = dlfn_start + (maxPart - part);
 
 	nameStart = 13 * (part - 1);
     j = nameSize - nameStart;
@@ -1288,36 +1285,6 @@ int enlargeDirentryClusterSpace(fat_driver* fatd, unsigned int startCluster, int
 
 //---------------------------------------------------------------------------
 /*
-  Create direntries of the long and short filename to the supplied buffer.
-
-  lname     : long name
-  sname     : short name
-  directory : 0-file, 1-directory
-  buffer    : start of the data buffer where to store direntries
-  cluster   : start cluster of the file/directory
-
-  returns the number of the direntries (3 means: 2 entries for long name + 1 entry for short name)
-  note: the filesize set in the direntry is 0 (for both directory and file)
-*/
-int createDirentry(const unsigned char* lname, const unsigned char* sname, char directory, unsigned int cluster, fat_direntry* dir_entry) {
-	int i;
-	int lsize;
-	int nameSize;
-	unsigned char chsum;
-
-	lsize = getDirentrySize(lname);
-	chsum = computeNameChecksum(sname);
-	nameSize = strlen(lname);
-	for (i = lsize; i > 0; i--) {
-		setLfnEntry(lname, nameSize, chsum, &dir_entry->lfn, i, lsize);
-	}
-	//now create direntry of the short name right behind the long name direntries
-	setSfnEntry(sname, directory, &dir_entry[lsize].sfn, cluster);
-	return lsize + 1;
-}
-
-//---------------------------------------------------------------------------
-/*
   Create empty directory space with two SFN direntries:
   1) current directory "."
   2) parent directory  ".."
@@ -1370,19 +1337,26 @@ int createDirectorySpace(fat_driver* fatd, unsigned int dirCluster, unsigned int
 
 //---------------------------------------------------------------------------
 /*
-  save direntries stored in dbuf to the directory space on the disk
+  Save direntries of the long and short filename to the directory space on the disk
 
   startCluster - start cluster of the directory space
-  dbuf         - direntry buffer
-  entrySize    - number of direntries stored in the dbuf
+  lname     : long name
+  sname     : short name
+  directory : 0-file, 1-directory
+  cluster   : start cluster of the file/directory
+
+  entrySize    - number of direntries to store
   entryIndex   - index of the direntry start in the directory space
 
   retSector    - contains sector number of the direntry (output)
   retOffset    - contains byte offse of the SFN direntry from start of the sector (output)
   the reason is to speed up modification of the SFN (size of the file)
 
+  note: the filesize set in the direntry is 0 (for both directory and file)
 */
-int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * dbuf, int entrySize, int entryIndex, unsigned int* retSector, int* retOffset) {
+int saveDirentry(fat_driver* fatd, unsigned int startCluster,
+  const unsigned char* lname, const unsigned char* sname, char directory, unsigned int cluster,
+  int entrySize, int entryIndex, unsigned int* retSector, int* retOffset) {
 	int i, j;
 	int dirSector;
 	unsigned int startSector;
@@ -1393,6 +1367,12 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 	int entryEndIndex;
 	int writeFlag;
 	mass_dev* mass_device = fatd->dev;
+    int part = entrySize - 1;
+	int nameSize;
+	unsigned char chsum;
+
+	chsum = computeNameChecksum(sname);
+	nameSize = strlen(lname);
 
 	cont = 1;
 	//clear name strings
@@ -1425,7 +1405,12 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 		// go through start of the sector till the end of sector
 		while (dirPos < fatd->partBpb.sectorSize) {
 			if (j >=entryIndex && j < entryEndIndex) {
-				memcpy(sbuf + dirPos, dbuf + ((j-entryIndex)*32), 32);
+                fat_direntry* dir_entry = (fat_direntry*) (sbuf + dirPos);
+                if (part == 0)
+                    setSfnEntry(sname, directory, &dir_entry->sfn, cluster);
+                else
+                    setLfnEntry(lname, nameSize, chsum, &dir_entry->lfn, part, entrySize - 1);
+                part--;
 				writeFlag++;
 				//SFN is stored
 				if (j == entryEndIndex-1) {
@@ -1434,7 +1419,7 @@ int saveDirentry(fat_driver* fatd, unsigned int startCluster, unsigned char * db
 				}
 			}
 			//sbuf + dirPos
-			dirPos += 32; //directory entry of size 32 bytes
+			dirPos += sizeof(fat_direntry);
 			j++;
 		}//ends "while"
 		//store modified sector
@@ -1570,16 +1555,8 @@ int fat_modifyDirSpace(fat_driver* fatd, unsigned char* lname, char directory, c
 	}
 	XPRINTF("USBHDFSD: I: new file/dir cluster=%d\n", newCluster);
 
-	//create direntry data to temporary buffer
-	ret = createDirentry(lname, sname, directory, newCluster, (fat_direntry*) fatd->tbuf);
-	XPRINTF("USBHDFSD: I: create direntry to buf ret=%d\n", ret);
-	if (ret < 0) {
-		return ret;
-	}
-	direntrySize = ret;
-
 	//now store direntries into the directory space
-	ret = saveDirentry(fatd, *startCluster, fatd->tbuf, direntrySize, entryIndex, retSector, retOffset);
+	ret = saveDirentry(fatd, *startCluster, lname, sname, directory, newCluster, direntrySize, entryIndex, retSector, retOffset);
 	XPRINTF("USBHDFSD: I: save direntry ret=%d\n", ret);
 	if (ret < 0) {
 		return ret;
