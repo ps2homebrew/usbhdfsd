@@ -673,7 +673,7 @@ void setLfnEntry(const unsigned char* lname, int nameSize, unsigned char chsum, 
 
 	dlfn = dlfn_start + (maxPart - part);
 
-	nameStart = 13 * part;
+	nameStart = 13 * (part - 1);
     j = nameSize - nameStart;
     if (j > 13) {
         j = 13;
@@ -696,12 +696,9 @@ void setLfnEntry(const unsigned char* lname, int nameSize, unsigned char chsum, 
 		}
     }
 
-	if (maxPart == 0) {
-		i = 1;
-	} else {
-		i = part/maxPart;
-	}
-	dlfn->entrySeq = (part+1) + (i * 64);
+	dlfn->entrySeq = part;
+    if (maxPart == part)
+        dlfn->entrySeq |= 0x40;
 	dlfn->checksum = chsum;
 	//1st part of the name
 	for (i = 0; i < 10; i++) dlfn->name1[i] = name[i];
@@ -1308,13 +1305,12 @@ int createDirentry(const unsigned char* lname, const unsigned char* sname, char 
 	int nameSize;
 	unsigned char chsum;
 
-	lsize = getDirentrySize(lname) - 1;
+	lsize = getDirentrySize(lname);
 	chsum = computeNameChecksum(sname);
 	nameSize = strlen(lname);
-	for (i = 0; i <= lsize; i++) {
-		setLfnEntry(lname, nameSize, chsum, &dir_entry->lfn, lsize-i, lsize);
+	for (i = lsize; i > 0; i--) {
+		setLfnEntry(lname, nameSize, chsum, &dir_entry->lfn, i, lsize);
 	}
-	lsize++;
 	//now create direntry of the short name right behind the long name direntries
 	setSfnEntry(sname, directory, &dir_entry[lsize].sfn, cluster);
 	return lsize + 1;
